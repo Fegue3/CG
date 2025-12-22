@@ -1,18 +1,28 @@
 #pragma once
-#include <GL/glew.h>
+
+#include <string>
+#include <glm/glm.hpp>
 
 namespace engine {
 
 class Shader {
 public:
-    bool load(const char* vertPath, const char* fragPath);
-    void destroy();
+    Shader();
+    ~Shader();
 
+    bool load(const std::string& vertPath, const std::string& fragPath);
     void use() const;
-    GLuint id() const { return m_program; }
+
+    // ✅ para o Renderer
+    void destroy();
+    unsigned int id() const;
+
+    void setMat4(const std::string& name, const glm::mat4& mat) const;
+    void setVec3(const std::string& name, const glm::vec3& v) const;
+    void setFloat(const std::string& name, float v) const;
 
 private:
-    GLuint m_program = 0;
+    unsigned int m_id = 0;
 };
 
 } // namespace engine
