@@ -1,9 +1,4 @@
 #pragma once
-
-// ⚠️ ORDEM CORRETA: GLEW antes de GLFW
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
 #include <utility>
 #include <string>
 
@@ -20,13 +15,16 @@ public:
     void swapBuffers();
     void destroy();
 
-    std::pair<int,int> getFramebufferSize() const;
+    void requestClose();
 
-    // ✅ Nome final (Game.cpp usa isto)
-    GLFWwindow* getHandle() const { return m_window; }
+    std::pair<int,int> getFramebufferSize() const;
+    std::pair<int,int> getWindowSize() const;
+
+    // não expõe GLFW types ao game
+    void* nativeHandle() const { return m_window; }
 
 private:
-    GLFWwindow* m_window = nullptr;
+    void* m_window = nullptr; // GLFWwindow* escondido
 };
 
-}
+} // namespace engine
