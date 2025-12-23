@@ -1,17 +1,26 @@
 #include "engine/Time.hpp"
-#include <GLFW/glfw3.h>
+#include <algorithm>
 
 namespace engine {
 
 void Time::tick() {
-    float t = (float)glfwGetTime();
-    m_dt = t - m_last;
-    m_last = t;
+    auto tp = clock::now();
+
+    if (!m_hasLast) {
+        m_lastTp = tp;
+        m_hasLast = true;
+        m_dt = 0.0f;
+        return;
+    }
+
+    std::chrono::duration<float> d = tp - m_lastTp;
+    m_lastTp = tp;
+
+    m_dt = d.count();
     if (m_dt < 0.0f) m_dt = 0.0f;
     if (m_dt > 0.05f) m_dt = 0.05f;
-}
 
-float Time::delta() const { return m_dt; }
-float Time::now() const { return (float)glfwGetTime(); }
+    m_now += m_dt;
+}
 
 } // namespace engine
