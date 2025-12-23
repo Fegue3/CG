@@ -13,7 +13,7 @@ public:
     bool load(const std::string& vertPath, const std::string& fragPath);
     void use() const;
 
-    // ✅ para o Renderer
+    // para o Renderer
     void destroy();
     unsigned int id() const;
 
