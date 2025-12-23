@@ -1,0 +1,65 @@
+#include "engine/Input.hpp"
+#include "engine/Window.hpp"
+
+#include <GLFW/glfw3.h>
+#include <algorithm>
+
+namespace engine {
+
+static int keyToGlfw(Key k) {
+    switch (k) {
+        case Key::Escape: return GLFW_KEY_ESCAPE;
+        case Key::Left:   return GLFW_KEY_LEFT;
+        case Key::Right:  return GLFW_KEY_RIGHT;
+        case Key::A:      return GLFW_KEY_A;
+        case Key::D:      return GLFW_KEY_D;
+        case Key::Space:  return GLFW_KEY_SPACE;
+    }
+    return GLFW_KEY_UNKNOWN;
+}
+
+static int mouseToGlfw(MouseButton b) {
+    switch (b) {
+        case MouseButton::Left: return GLFW_MOUSE_BUTTON_LEFT;
+    }
+    return GLFW_MOUSE_BUTTON_LEFT;
+}
+
+void Input::update(const Window& window) {
+    std::copy(std::begin(m_keyDown), std::end(m_keyDown), std::begin(m_keyPrev));
+    std::copy(std::begin(m_mouseDown), std::end(m_mouseDown), std::begin(m_mousePrev));
+
+    GLFWwindow* w = (GLFWwindow*)window.nativeHandle();
+
+    for (int i = 0; i < 6; ++i) {
+        m_keyDown[i] = (glfwGetKey(w, keyToGlfw((Key)i)) == GLFW_PRESS);
+    }
+
+    for (int i = 0; i < 1; ++i) {
+        m_mouseDown[i] = (glfwGetMouseButton(w, mouseToGlfw((MouseButton)i)) == GLFW_PRESS);
+    }
+
+    double mx, my;
+    glfwGetCursorPos(w, &mx, &my);
+
+    auto [fbW, fbH] = window.getFramebufferSize();
+    auto [ww, wh]   = window.getWindowSize();
+    ww = std::max(1, ww);
+    wh = std::max(1, wh);
+
+    float sx = (float)fbW / (float)ww;
+    float sy = (float)fbH / (float)wh;
+
+    m_mouseX = (float)mx * sx;
+    m_mouseY = (float)my * sy;
+}
+
+bool Input::keyDown(Key k) const { return m_keyDown[(int)k]; }
+bool Input::keyPressed(Key k) const { return m_keyDown[(int)k] && !m_keyPrev[(int)k]; }
+
+bool Input::mouseDown(MouseButton b) const { return m_mouseDown[(int)b]; }
+bool Input::mousePressed(MouseButton b) const { return m_mouseDown[(int)b] && !m_mousePrev[(int)b]; }
+
+std::pair<float,float> Input::mousePosFbPx() const { return {m_mouseX, m_mouseY}; }
+
+} // namespace engine
