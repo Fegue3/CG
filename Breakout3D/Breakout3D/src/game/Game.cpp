@@ -1,9 +1,6 @@
 #include "game/Game.hpp"
-
-// ⚠️ ORDEM IMPORTANTE: GLEW antes de GLFW (senão dá gl.h before glew.h)
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
+#include "engine/Input.hpp"
+#include "game/GameAssets.hpp"
 #include <algorithm>
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,91 +22,7 @@ static bool sphereAabbXZ(const glm::vec3& c, float r, const glm::vec3& bpos, con
     return (dx * dx + dz * dz) <= (r * r);
 }
 
-// ------------------- UI helpers (2D) -------------------
-static void drawRect2D(engine::Renderer& r, float x, float y, float w, float h, const glm::vec3& color, float z = 0.0f) {
-    glm::vec3 center(x + w * 0.5f, y + h * 0.5f, z);
-    glm::vec3 size(w, h, 1.0f);
-    r.drawCube({}, center, size, color);
-}
-
-static bool pointInRectPx(float px, float py, float x, float y, float w, float h) {
-    return (px >= x && px <= x + w && py >= y && py <= y + h);
-}
-
-static void drawHeart2D(engine::Renderer& r, float x, float y, float s, const glm::vec3& color) {
-    float w = s, h = s;
-
-    drawRect2D(r, x + w*0.20f, y + h*0.15f, w*0.30f, h*0.30f, color);
-    drawRect2D(r, x + w*0.50f, y + h*0.15f, w*0.30f, h*0.30f, color);
-
-    drawRect2D(r, x + w*0.20f, y + h*0.38f, w*0.60f, h*0.30f, color);
-
-    drawRect2D(r, x + w*0.32f, y + h*0.62f, w*0.36f, h*0.22f, color);
-    drawRect2D(r, x + w*0.41f, y + h*0.78f, w*0.18f, h*0.18f, color);
-}
-
-// fonte 5x7 mínima (só letras que usamos)
-static const unsigned char* glyph(char c) {
-    static unsigned char A[7] = {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11};
-    static unsigned char C[7] = {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E};
-    static unsigned char E[7] = {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F};
-    static unsigned char F[7] = {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10};
-    static unsigned char G[7] = {0x0E,0x11,0x10,0x17,0x11,0x11,0x0F};
-    static unsigned char H[7] = {0x11,0x11,0x11,0x1F,0x11,0x11,0x11};
-    static unsigned char I[7] = {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E};
-    static unsigned char N[7] = {0x11,0x19,0x15,0x13,0x11,0x11,0x11};
-    static unsigned char O[7] = {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E};
-    static unsigned char R[7] = {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11};
-    static unsigned char S[7] = {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E};
-    static unsigned char U[7] = {0x11,0x11,0x11,0x11,0x11,0x11,0x0E};
-    static unsigned char V[7] = {0x11,0x11,0x11,0x11,0x11,0x0A,0x04};
-    static unsigned char W[7] = {0x11,0x11,0x11,0x15,0x15,0x15,0x0A};
-    static unsigned char Y[7] = {0x11,0x11,0x0A,0x04,0x04,0x04,0x04};
-    static unsigned char _[7] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-    static unsigned char SP[7]= {0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-
-    switch (c) {
-        case 'A': return A; case 'C': return C; case 'E': return E; case 'F': return F;
-        case 'G': return G; case 'H': return H; case 'I': return I; case 'N': return N;
-        case 'O': return O; case 'R': return R; case 'S': return S; case 'U': return U;
-        case 'V': return V; case 'W': return W; case 'Y': return Y; case ' ': return SP;
-        default:  return _;
-    }
-}
-
-static void drawText2D(engine::Renderer& r, float x, float y, float scale, const glm::vec3& color, const char* text) {
-    float cx = x;
-    for (const char* p = text; *p; ++p) {
-        char c = *p;
-        if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
-
-        const unsigned char* g = glyph(c);
-
-        for (int row = 0; row < 7; ++row) {
-            unsigned char bits = g[row];
-            for (int col = 0; col < 5; ++col) {
-                bool on = (bits & (1 << (4 - col))) != 0;
-                if (!on) continue;
-
-                float px = cx + col * scale;
-                float py = y  + row * scale;
-                drawRect2D(r, px, py, scale, scale, color);
-            }
-        }
-        cx += 6 * scale;
-    }
-}
-
-static int textWidthPx(const char* text, float scale) {
-    int len = 0;
-    for (const char* p = text; *p; ++p) ++len;
-    return (int)(len * 6 * scale);
-}
-
 namespace game {
-
-Game::Game(engine::Window& window, engine::Time& time, engine::Renderer& renderer)
-: m_window(window), m_time(time), m_renderer(renderer) {}
 
 static bool anyBricksAlive(const GameState& s) {
     for (const auto& b : s.bricks) if (b.alive) return true;
@@ -125,6 +38,13 @@ static void resetBallToPaddle(GameState& s, const GameConfig& cfg) {
     );
 }
 
+static bool pointInRectPx(float px, float py, float x, float y, float w, float h) {
+    return (px >= x && px <= x + w && py >= y && py <= y + h);
+}
+
+Game::Game(engine::Window& window, engine::Time& time, engine::Renderer& renderer, GameAssets& assets)
+: m_window(window), m_time(time), m_renderer(renderer), m_assets(assets) {}
+
 void Game::init() {
     m_state.mode = GameMode::PLAYING;
     m_state.lives = 3;
@@ -137,15 +57,14 @@ void Game::init() {
     resetBallToPaddle(m_state, m_cfg);
 
     m_state.brickHitCooldown = 0.0f;
-    m_state.mouseWasDown = false;
-
     m_state.bricks.clear();
 
-    int cols = 10;
-    int rows = 6;
+    // ✅ MAIS COLUNAS + 3 verdes e 2 do resto (total 9 filas)
+    const int cols = 12;
+    const int rows = 9; // 2 roxo + 2 azul + 2 amarelo + 3 verde
 
     glm::vec3 brickSize(2.2f, 0.6f, 1.0f);
-    float gapX = 0.35f;
+    float gapX = 0.30f;
     float gapZ = 0.35f;
 
     float startZ = m_cfg.arenaMinZ + 2.2f;
@@ -163,9 +82,11 @@ void Game::init() {
             b.pos.y = 0.0f;
             b.pos.z = startZ + r * (brickSize.z + gapZ);
 
-            if (r == 0)      b.maxHp = b.hp = 4;
-            else if (r == 1) b.maxHp = b.hp = 3;
-            else if (r == 2) b.maxHp = b.hp = 2;
+            // ✅ 2 roxo, 2 azul, 2 amarelo, 3 verde
+            // r: 0-1 => 4, 2-3 => 3, 4-5 => 2, 6-8 => 1
+            if (r <= 1)      b.maxHp = b.hp = 4;
+            else if (r <= 3) b.maxHp = b.hp = 3;
+            else if (r <= 5) b.maxHp = b.hp = 2;
             else             b.maxHp = b.hp = 1;
 
             m_state.bricks.push_back(b);
@@ -173,12 +94,13 @@ void Game::init() {
     }
 }
 
-void Game::update() {
-    GLFWwindow* w = m_window.getHandle();   // ✅ FIX: era handle()
+void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
-    if (glfwGetKey(w, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(w, 1);
+    if (input.keyDown(engine::Key::Escape)) {
+        m_window.requestClose();
+        return;
+    }
 
     if (m_state.brickHitCooldown > 0.0f)
         m_state.brickHitCooldown = std::max(0.0f, m_state.brickHitCooldown - dt);
@@ -189,27 +111,11 @@ void Game::update() {
         m_state.ballAttached = true;
     }
 
-    // ------------- GAME OVER / WIN: click 2D -------------
+    // ------------- GAME OVER / WIN: click UI -------------
     if (m_state.mode != GameMode::PLAYING) {
-        auto [fbW, fbH] = m_window.getFramebufferSize(); // ✅ FIX: era getFramebufferSize(fbW, fbH)
-
-        int ww = 1, wh = 1;
-        glfwGetWindowSize(w, &ww, &wh);
-        ww = std::max(1, ww);
-        wh = std::max(1, wh);
-
-        double mx, my;
-        glfwGetCursorPos(w, &mx, &my);
-
-        float sx = (float)fbW / (float)ww;
-        float sy = (float)fbH / (float)wh;
-
-        float px = (float)mx * sx;
-        float py = (float)my * sy;
-
-        bool down = (glfwGetMouseButton(w, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
-        bool click = (down && !m_state.mouseWasDown);
-        m_state.mouseWasDown = down;
+        auto [fbW, fbH] = m_window.getFramebufferSize();
+        auto [px, py]   = input.mousePosFbPx();
+        bool click      = input.mousePressed(engine::MouseButton::Left);
 
         float bw = 220.0f, bh = 60.0f;
         float gap = 30.0f;
@@ -223,15 +129,15 @@ void Game::update() {
 
         if (click) {
             if (pointInRectPx(px, py, rx, ry, bw, bh)) { init(); return; }
-            if (pointInRectPx(px, py, fx, fy, bw, bh)) { glfwSetWindowShouldClose(w, 1); return; }
+            if (pointInRectPx(px, py, fx, fy, bw, bh)) { m_window.requestClose(); return; }
         }
         return;
     }
 
     // ----------------- PLAYING -----------------
     float dir = 0.0f;
-    if (glfwGetKey(w, GLFW_KEY_A) == GLFW_PRESS || glfwGetKey(w, GLFW_KEY_LEFT) == GLFW_PRESS) dir -= 1.0f;
-    if (glfwGetKey(w, GLFW_KEY_D) == GLFW_PRESS || glfwGetKey(w, GLFW_KEY_RIGHT) == GLFW_PRESS) dir += 1.0f;
+    if (input.keyDown(engine::Key::A) || input.keyDown(engine::Key::Left))  dir -= 1.0f;
+    if (input.keyDown(engine::Key::D) || input.keyDown(engine::Key::Right)) dir += 1.0f;
 
     m_state.paddlePos.x += dir * m_cfg.paddleSpeed * dt;
 
@@ -245,7 +151,7 @@ void Game::update() {
     if (m_state.ballAttached) {
         resetBallToPaddle(m_state, m_cfg);
 
-        if (glfwGetKey(w, GLFW_KEY_SPACE) == GLFW_PRESS) {
+        if (input.keyDown(engine::Key::Space)) {
             m_state.ballAttached = false;
             glm::vec3 d = glm::normalize(glm::vec3(0.30f, 0.0f, -1.0f));
             m_state.ballVel = d * m_cfg.ballSpeed;
@@ -255,6 +161,7 @@ void Game::update() {
 
     m_state.ballPos += m_state.ballVel * dt;
 
+    // walls bounce
     if (m_state.ballPos.x - m_cfg.ballRadius < m_cfg.arenaMinX) {
         m_state.ballPos.x = m_cfg.arenaMinX + m_cfg.ballRadius;
         m_state.ballVel.x = std::abs(m_state.ballVel.x);
@@ -263,7 +170,6 @@ void Game::update() {
         m_state.ballPos.x = m_cfg.arenaMaxX - m_cfg.ballRadius;
         m_state.ballVel.x = -std::abs(m_state.ballVel.x);
     }
-
     if (m_state.ballPos.z - m_cfg.ballRadius < m_cfg.arenaMinZ) {
         m_state.ballPos.z = m_cfg.arenaMinZ + m_cfg.ballRadius;
         m_state.ballVel.z = std::abs(m_state.ballVel.z);
@@ -271,7 +177,9 @@ void Game::update() {
 
     // Paddle collision
     {
+        float paddleHalfX = m_cfg.paddleSize.x * 0.5f;
         float halfZ = m_cfg.paddleSize.z * 0.5f;
+
         float minX = m_state.paddlePos.x - paddleHalfX;
         float maxX = m_state.paddlePos.x + paddleHalfX;
         float minZ = m_state.paddlePos.z - halfZ;
@@ -295,12 +203,14 @@ void Game::update() {
         }
     }
 
-    // Brick collisions (cooldown anti double hit)
+    // Brick collisions
     if (m_state.brickHitCooldown <= 0.0f) {
         for (auto& b : m_state.bricks) {
             if (!b.alive) continue;
 
             if (sphereAabbXZ(m_state.ballPos, m_cfg.ballRadius, b.pos, b.size)) {
+
+                // ✅ HIT: só reduz HP (o render é que escolhe *qual OBJ* mostrar)
                 b.hp--;
                 if (b.hp <= 0) b.alive = false;
 
@@ -331,14 +241,13 @@ void Game::update() {
         if (m_state.lives > 0) {
             resetBallToPaddle(m_state, m_cfg);
         } else {
-            if (anyBricksAlive(m_state)) m_state.mode = GameMode::GAME_OVER;
-            else m_state.mode = GameMode::WIN;
+            m_state.mode = anyBricksAlive(m_state) ? GameMode::GAME_OVER : GameMode::WIN;
         }
     }
 }
 
 void Game::render() {
-    auto [fbW, fbH] = m_window.getFramebufferSize(); // ✅ FIX
+    auto [fbW, fbH] = m_window.getFramebufferSize();
     m_renderer.beginFrame(fbW, fbH);
 
     // -------- 3D PASS --------
@@ -353,133 +262,95 @@ void Game::render() {
     glm::mat4 P = glm::perspective(glm::radians(58.0f), (float)fbW/(float)fbH, 0.1f, 300.0f);
     m_renderer.setCamera(V, P, camPos);
 
-    // Walls
+    // ✅ NÃO usamos tint para “dar cor” (só deixa as texturas falarem)
+    glm::vec3 tint(1.0f);
+
+    // Walls (usa brick01 como textura base)
     float zCenter = (m_cfg.arenaMinZ + m_cfg.arenaMaxZ) * 0.5f;
-    glm::vec3 wallColor(0.20f, 0.30f, 0.70f);
     float sideThickness = 1.2f;
     float topThickness  = 1.2f;
     float wallHeight    = 1.0f;
 
-    m_renderer.drawCube({}, glm::vec3(m_cfg.arenaMinX - sideThickness*0.5f, 0.0f, zCenter),
-                        glm::vec3(sideThickness, wallHeight, arenaD + topThickness), wallColor);
+    m_renderer.drawMesh(m_assets.brick01,
+        glm::vec3(m_cfg.arenaMinX - sideThickness*0.5f, 0.0f, zCenter),
+        glm::vec3(sideThickness, wallHeight, arenaD + topThickness),
+        tint
+    );
 
-    m_renderer.drawCube({}, glm::vec3(m_cfg.arenaMaxX + sideThickness*0.5f, 0.0f, zCenter),
-                        glm::vec3(sideThickness, wallHeight, arenaD + topThickness), wallColor);
+    m_renderer.drawMesh(m_assets.brick01,
+        glm::vec3(m_cfg.arenaMaxX + sideThickness*0.5f, 0.0f, zCenter),
+        glm::vec3(sideThickness, wallHeight, arenaD + topThickness),
+        tint
+    );
 
-    m_renderer.drawCube({}, glm::vec3(0.0f, 0.0f, m_cfg.arenaMinZ - topThickness*0.5f),
-                        glm::vec3(arenaW + sideThickness*2.0f, wallHeight, topThickness), wallColor);
+    m_renderer.drawMesh(m_assets.brick01,
+        glm::vec3(0.0f, 0.0f, m_cfg.arenaMinZ - topThickness*0.5f),
+        glm::vec3(arenaW + sideThickness*2.0f, wallHeight, topThickness),
+        tint
+    );
 
-    // Bricks
+    // ✅ BRICKS: trocar para *_1hit / *_2hit / *_3hit (texturas/OBJ)
     for (const auto& b : m_state.bricks) {
         if (!b.alive) continue;
 
-        glm::vec3 color;
+        const engine::Mesh* m = &m_assets.brick01;
+
         if (b.maxHp == 4) {
-            if (b.hp == 4)      color = {0.45f, 0.15f, 0.65f};
-            else if (b.hp == 3) color = {0.55f, 0.25f, 0.75f};
-            else if (b.hp == 2) color = {0.70f, 0.45f, 0.85f};
-            else                color = {0.85f, 0.70f, 0.95f};
+            if (b.hp == 4)      m = &m_assets.brick04;
+            else if (b.hp == 3) m = &m_assets.brick04_1hit;
+            else if (b.hp == 2) m = &m_assets.brick04_2hit;
+            else                m = &m_assets.brick04_3hit;
         } else if (b.maxHp == 3) {
-            if (b.hp == 3)      color = {0.20f, 0.30f, 0.85f};
-            else if (b.hp == 2) color = {0.45f, 0.55f, 0.95f};
-            else                color = {0.75f, 0.82f, 1.00f};
+            if (b.hp == 3)      m = &m_assets.brick03;
+            else if (b.hp == 2) m = &m_assets.brick03_1hit;
+            else                m = &m_assets.brick03_2hit;
         } else if (b.maxHp == 2) {
-            if (b.hp == 2)      color = {0.90f, 0.80f, 0.20f};
-            else                color = {0.98f, 0.95f, 0.55f};
+            if (b.hp == 2)      m = &m_assets.brick02;
+            else                m = &m_assets.brick02_1hit;
         } else {
-            color = {0.20f, 0.80f, 0.35f};
+            m = &m_assets.brick01;
         }
 
-        m_renderer.drawCube({}, b.pos, b.size, color);
+        m_renderer.drawMesh(*m, b.pos, b.size, tint);
     }
 
     // Paddle
-    glm::vec3 paddleColor(0.95f, 0.95f, 0.95f);
-    glm::vec3 bodySize = m_cfg.paddleSize;
-    glm::vec3 capSize  = glm::vec3(bodySize.z, bodySize.y, bodySize.z);
-
-    float halfX = bodySize.x * 0.5f;
-    float capOffset = halfX - capSize.x * 0.5f;
-
-    glm::vec3 bodyMidSize = bodySize;
-    bodyMidSize.x = bodySize.x - capSize.x;
-
-    m_renderer.drawCube({}, m_state.paddlePos, bodyMidSize, paddleColor);
-    m_renderer.drawCube({}, m_state.paddlePos + glm::vec3(-capOffset, 0, 0), capSize, paddleColor);
-    m_renderer.drawCube({}, m_state.paddlePos + glm::vec3( capOffset, 0, 0), capSize, paddleColor);
+    m_renderer.drawMesh(m_assets.paddle, m_state.paddlePos, m_cfg.paddleSize, tint);
 
     // Ball
-    glm::vec3 ballColor(0.95f, 0.35f, 0.35f);
     float d = m_cfg.ballRadius * 2.0f;
-    m_renderer.drawCube({}, m_state.ballPos, glm::vec3(d, d, d), ballColor);
+    m_renderer.drawMesh(m_assets.ball, m_state.ballPos, glm::vec3(d, d, d), tint);
 
-    // -------- 2D PASS (HUD + OVERLAY) --------
-    glDisable(GL_DEPTH_TEST);
-    glClear(GL_DEPTH_BUFFER_BIT);
+    // -------- UI PASS (HUD 3D em ortho) --------
+    m_renderer.beginUI(fbW, fbH);
 
-    glm::mat4 Vui = glm::mat4(1.0f);
-    glm::mat4 Pui = glm::ortho(0.0f, (float)fbW, (float)fbH, 0.0f, -10.0f, 10.0f);
-    m_renderer.setCamera(Vui, Pui, glm::vec3(0,0,1));
+    const float padX = 22.0f;
+    const float padTop = 18.0f;
 
-    glm::vec3 heartOn(0.95f, 0.20f, 0.25f);
-    glm::vec3 heartOff(0.22f, 0.22f, 0.26f);
+    const float hs = 56.0f;   // ✅ menor (era 70)
+    const float gap = 12.0f;
 
-    float hx = 18.0f, hy = 18.0f;
-    float hs = 32.0f;
-    float gap = 10.0f;
+    const float rx = glm::radians(18.0f);
+    const float ry = glm::radians(-12.0f);
 
     for (int i = 0; i < 3; ++i) {
-        glm::vec3 col = (i < m_state.lives) ? heartOn : heartOff;
-        drawHeart2D(m_renderer, hx + i*(hs + gap), hy, hs, col);
+        float xCenter = padX + hs * 0.5f + i * (hs + gap);
+        float yCenter = (float)fbH - (padTop + hs * 0.5f);
+
+        glm::mat4 M(1.0f);
+        M = glm::translate(M, glm::vec3(xCenter, yCenter, 0.0f));
+        M = glm::rotate(M, ry, glm::vec3(0,1,0));
+        M = glm::rotate(M, rx, glm::vec3(1,0,0));
+        M = glm::scale(M, glm::vec3(hs, hs, hs * 0.55f));
+
+        glm::vec3 col = (i < m_state.lives)
+            ? glm::vec3(1.0f, 0.20f, 0.25f)
+            : glm::vec3(0.20f, 0.20f, 0.22f);
+
+        m_renderer.drawMesh(m_assets.heart, M, col);
     }
 
-    if (m_state.mode != GameMode::PLAYING) {
-        // ✅ Menos escuro (para não parecer ecrã preto)
-        drawRect2D(m_renderer, 0.0f, 0.0f, (float)fbW, (float)fbH, glm::vec3(0.10f,0.10f,0.12f));
-
-        const char* title = (m_state.mode == GameMode::WIN) ? "YOU WIN" : "GAME OVER";
-        float titleScale = 7.0f;
-        float titleX = (fbW * 0.5f) - (textWidthPx(title, titleScale) * 0.5f);
-        float titleY = fbH * 0.30f;
-        drawText2D(m_renderer, titleX, titleY, titleScale, glm::vec3(0.96f,0.96f,0.96f), title);
-
-        float bw = 220.0f, bh = 60.0f;
-        float g = 30.0f;
-        float cx = fbW * 0.5f;
-        float y  = fbH * 0.55f;
-
-        float rx = cx - bw - g*0.5f;
-        float fx = cx + g*0.5f;
-
-        GLFWwindow* w = m_window.getHandle(); // ✅ FIX
-        int ww = 1, wh = 1;
-        glfwGetWindowSize(w, &ww, &wh);
-        ww = std::max(1, ww);
-        wh = std::max(1, wh);
-
-        double mx, my;
-        glfwGetCursorPos(w, &mx, &my);
-
-        float sx = (float)fbW / (float)ww;
-        float sy = (float)fbH / (float)wh;
-        float px = (float)mx * sx;
-        float py = (float)my * sy;
-
-        bool hoverR = pointInRectPx(px, py, rx, y, bw, bh);
-        bool hoverF = pointInRectPx(px, py, fx, y, bw, bh);
-
-        glm::vec3 rCol = hoverR ? glm::vec3(0.30f,0.90f,0.35f) : glm::vec3(0.22f,0.75f,0.28f);
-        glm::vec3 fCol = hoverF ? glm::vec3(0.95f,0.30f,0.30f) : glm::vec3(0.78f,0.22f,0.22f);
-
-        drawRect2D(m_renderer, rx, y, bw, bh, rCol);
-        drawRect2D(m_renderer, fx, y, bw, bh, fCol);
-
-        drawText2D(m_renderer, rx + 28.0f, y + 18.0f, 4.0f, glm::vec3(0.05f,0.05f,0.05f), "REINICIAR");
-        drawText2D(m_renderer, fx + 58.0f, y + 18.0f, 4.0f, glm::vec3(0.05f,0.05f,0.05f), "FECHAR");
-    }
-
-    glEnable(GL_DEPTH_TEST);
-
+    m_renderer.endUI();
     m_window.swapBuffers();
 }
 
