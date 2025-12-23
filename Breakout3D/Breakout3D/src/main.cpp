@@ -1,7 +1,10 @@
 #include "engine/Window.hpp"
 #include "engine/Time.hpp"
 #include "engine/Renderer.hpp"
+#include "engine/Input.hpp"
+
 #include "game/Game.hpp"
+#include "game/GameAssets.hpp"
 
 int main() {
     engine::Window window;
@@ -13,17 +16,27 @@ int main() {
     engine::Renderer renderer;
     if (!renderer.init()) return -1;
 
-    game::Game game(window, time, renderer);
+    // ✅ assets: carrega .obj/.mtl (e texturas via map_Kd)
+    game::GameAssets assets;
+    if (!assets.loadAll()) return -1;
+
+    // ✅ input: GLFW fica escondido no engine
+    engine::Input input;
+
+    // ✅ game recebe assets
+    game::Game game(window, time, renderer, assets);
     game.init();
 
     while (!window.shouldClose()) {
         time.tick();
         window.pollEvents();
 
-        game.update();
+        input.update(window);
+        game.update(input);
         game.render();
     }
 
+    assets.destroy();
     renderer.shutdown();
     window.destroy();
     return 0;
