@@ -1,28 +1,48 @@
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Iinclude
-LIBS = -lglfw -lGL -lGLEW
+SHELL := /bin/sh
 
-SRC = \
-  src/main.cpp \
-  src/engine/Window.cpp \
-  src/engine/Time.cpp \
-  src/engine/Shader.cpp \
-  src/engine/Mesh.cpp \
-  src/engine/Renderer.cpp \
-  src/game/Game.cpp \
-  src/game/GameConfig.cpp \
-  src/game/GameState.cpp
+# --------- dirs ----------
+SRC_DIR := src
+INC_DIR := include
+OBJ_DIR := obj
 
-OBJ = $(SRC:.cpp=.o)
-BIN = breakout3d
+EXE := breakout3d
 
-all: $(BIN)
+# --------- compiler ----------
+CXX := g++
+CXXFLAGS := -std=c++17 -Wall -I$(INC_DIR) -I. -MMD -MP
 
-$(BIN): $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIBS)
+# --------- OS libs ----------
+SYSTEM_UNAME := $(shell uname -s)
+
+ifeq ($(SYSTEM_UNAME),Linux)
+	LDLIBS := -lm -lGLU -lGL -lGLEW -lglfw
+endif
+ifeq ($(SYSTEM_UNAME),Darwin)
+	LDLIBS := -lm -framework OpenGL -L/opt/local/lib/ -lGLEW -lglfw
+endif
+
+# --------- sources (recursive) ----------
+SRC := $(shell find $(SRC_DIR) -name "*.cpp")
+OBJ := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
+DEP := $(OBJ:.o=.d)
+
+.PHONY: all clean run
+
+all: $(EXE)
+
+# link
+$(EXE): $(OBJ)
+	$(CXX) $(OBJ) $(LDLIBS) -o $@
+
+# compile (keeps folder structure inside obj/)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJ) $(BIN)
+	rm -rf $(OBJ_DIR) $(EXE)
 
-run: $(BIN)
-	./$(BIN)
+run: $(EXE)
+	./$(EXE)
+
+-include $(DEP)
