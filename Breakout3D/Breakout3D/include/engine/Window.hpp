@@ -9,7 +9,7 @@ public:
     Window();
     ~Window();
 
-    bool create(int width, int height, const std::string& title);
+    bool create(int width, int height, const std::string& title, bool fullscreen = false);
     void pollEvents();
     bool shouldClose() const;
     void swapBuffers();
