@@ -14,6 +14,9 @@ static int keyToGlfw(Key k) {
         case Key::A:      return GLFW_KEY_A;
         case Key::D:      return GLFW_KEY_D;
         case Key::Space:  return GLFW_KEY_SPACE;
+        case Key::K1:     return GLFW_KEY_1;
+        case Key::K2:     return GLFW_KEY_2;
+        case Key::K3:     return GLFW_KEY_3;
     }
     return GLFW_KEY_UNKNOWN;
 }
@@ -31,7 +34,7 @@ void Input::update(const Window& window) {
 
     GLFWwindow* w = (GLFWwindow*)window.nativeHandle();
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 9; ++i) {
         m_keyDown[i] = (glfwGetKey(w, keyToGlfw((Key)i)) == GLFW_PRESS);
     }
 
