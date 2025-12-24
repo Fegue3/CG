@@ -63,7 +63,7 @@ void Game::init() {
     const int cols = 12;
     const int rows = 9; // 2 roxo + 2 azul + 2 amarelo + 3 verde
 
-    glm::vec3 brickSize(2.2f, 0.6f, 1.0f);
+    glm::vec3 brickSize(2.6f, 0.7f, 1.2f);
     float gapX = 0.30f;
     float gapZ = 0.35f;
 
@@ -117,19 +117,31 @@ void Game::update(const engine::Input& input) {
         auto [px, py]   = input.mousePosFbPx();
         bool click      = input.mousePressed(engine::MouseButton::Left);
 
-        float bw = 220.0f, bh = 60.0f;
-        float gap = 30.0f;
-        float cx = fbW * 0.5f;
-        float cy = fbH * 0.55f;
-
-        float rx = cx - bw - gap * 0.5f;
-        float ry = cy;
-        float fx = cx + gap * 0.5f;
-        float fy = cy;
+        // Panel dimensions
+        float panelW = 450.0f;
+        float panelH = 200.0f;
+        float panelX = (fbW - panelW) * 0.5f;
+        float panelY = (fbH - panelH) * 0.5f;
+        
+        // Button dimensions
+        float btnW = 100.0f;
+        float btnH = 60.0f;
+        float btnGap = 50.0f;
+        float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
+        float btnX_right = btnX_left + btnW + btnGap;
+        float btnY = panelY + (panelH - btnH) * 0.5f;
 
         if (click) {
-            if (pointInRectPx(px, py, rx, ry, bw, bh)) { init(); return; }
-            if (pointInRectPx(px, py, fx, fy, bw, bh)) { m_window.requestClose(); return; }
+            // Green button: restart
+            if (pointInRectPx(px, py, btnX_left, btnY, btnW, btnH)) { 
+                init(); 
+                return; 
+            }
+            // Red button: close window
+            if (pointInRectPx(px, py, btnX_right, btnY, btnW, btnH)) { 
+                m_window.requestClose(); 
+                return; 
+            }
         }
         return;
     }
@@ -348,6 +360,45 @@ void Game::render() {
             : glm::vec3(0.20f, 0.20f, 0.22f);
 
         m_renderer.drawMesh(m_assets.heart, M, col);
+    }
+
+    // Game Over / Win overlay
+    if (m_state.mode != GameMode::PLAYING) {
+        // Black background panel
+        float panelW = 450.0f;
+        float panelH = 200.0f;
+        float panelX = (fbW - panelW) * 0.5f;
+        float panelY = (fbH - panelH) * 0.5f;
+        
+        m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec3(0.1f, 0.1f, 0.1f));
+        
+        // Buttons
+        float btnW = 140.0f;
+        float btnH = 70.0f;
+        float btnGap = 50.0f;
+        float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
+        float btnX_right = btnX_left + btnW + btnGap;
+        float btnY = panelY + (panelH - btnH) * 0.5f;
+        
+        m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec3(0.2f, 0.8f, 0.2f));
+        m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec3(0.8f, 0.2f, 0.2f));
+        
+        // Draw text on buttons - centered
+        float labelH = 20.0f;
+        float labelW = 14.0f;
+        float labelSpacing = 4.0f;
+        std::string leftLabel = "RESTART";
+        std::string rightLabel = "SAIR";
+        
+        float leftTextWidth = leftLabel.size() * labelW + (leftLabel.size() - 1) * labelSpacing;
+        float rightTextWidth = rightLabel.size() * labelW + (rightLabel.size() - 1) * labelSpacing;
+        
+        float leftX = btnX_left + (btnW - leftTextWidth) * 0.5f;
+        float rightX = btnX_right + (btnW - rightTextWidth) * 0.5f;
+        float labelY = btnY + (btnH - labelH) * 0.5f;
+        
+        m_renderer.drawUIText(leftX, labelY, leftLabel, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        m_renderer.drawUIText(rightX, labelY, rightLabel, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     }
 
     m_renderer.endUI();
