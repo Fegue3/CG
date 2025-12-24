@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <string>
 #include "engine/Shader.hpp"
 #include "engine/Mesh.hpp"
 
@@ -18,6 +19,8 @@ public:
 
     // UI pass (HUD 3D em ortho)
     void beginUI(int fbW, int fbH);
+    void drawUIQuad(float x, float y, float w, float h, const glm::vec3& color);
+    void drawUIText(float x, float y, const std::string& text, float scale = 1.0f, const glm::vec3& color = glm::vec3(1.0f));
     void endUI();
 
 private:
@@ -26,7 +29,6 @@ private:
     glm::mat4 m_V{1.0f}, m_P{1.0f};
     glm::vec3 m_camPos{0,0,0};
 
-    // ✅ params de luz/shading (troca entre 3D e UI)
     glm::vec3 m_lightPos{0.0f, 10.0f, 5.0f};
     glm::vec3 m_lightColor{1.0f, 1.0f, 1.0f};
     float m_ambientK = 0.15f;
