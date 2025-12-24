@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/Mesh.hpp"
+#include "engine/Texture.hpp"
 
 namespace game {
 
@@ -22,6 +23,12 @@ struct GameAssets {
     engine::Mesh brick04_1hit;
     engine::Mesh brick04_2hit;
     engine::Mesh brick04_3hit;
+
+    engine::Mesh expand;
+    engine::Mesh extraBall;
+    engine::Mesh slow;
+    engine::Mesh extraLife;
+    engine::Texture2D backgroundTexs[4];
 
     bool loadAll();
     void destroy();
