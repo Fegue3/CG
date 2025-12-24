@@ -26,10 +26,18 @@ bool GameAssets::loadAll() {
         brick04_2hit  = engine::Mesh::loadOBJ("Brick_04_2hit.obj");
         brick04_3hit  = engine::Mesh::loadOBJ("Brick_04_3hit.obj");
 
+        expand        = engine::Mesh::loadOBJ("Expand.obj");
+        extraBall     = engine::Mesh::loadOBJ("Extra_Ball.obj");
+        slow          = engine::Mesh::loadOBJ("Slow.obj");
+        extraLife     = engine::Mesh::loadOBJ("extralife.obj");
+
         // Se quiseres walls com o mesmo mesh do brick:
         wall = brick01;
 
-
+        backgroundTexs[0] = engine::Texture2D::loadFromFile("assets/textures/Background.png", true);
+        backgroundTexs[1] = engine::Texture2D::loadFromFile("assets/textures/Background2.png", true);
+        backgroundTexs[2] = engine::Texture2D::loadFromFile("assets/textures/Background3.png", true);
+        backgroundTexs[3] = engine::Texture2D::loadFromFile("assets/textures/Background4.png", true);
 
         return true;
     } catch (const std::exception& e) {
@@ -59,6 +67,12 @@ void GameAssets::destroy() {
     brick04_1hit.destroy();
     brick04_2hit.destroy();
     brick04_3hit.destroy();
+
+    expand.destroy();
+    extraBall.destroy();
+    slow.destroy();
+    extraLife.destroy();
+    for (int i = 0; i < 4; i++) backgroundTexs[i].destroy();
 }
 
 } // namespace game
