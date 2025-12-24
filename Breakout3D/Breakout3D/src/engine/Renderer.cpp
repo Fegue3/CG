@@ -43,6 +43,61 @@ void Renderer::beginFrame(int fbW, int fbH) {
     m_shininess  = 32.0f;
 }
 
+void Renderer::drawBackground(unsigned int textureId) {
+    glDisable(GL_DEPTH_TEST);
+    m_shader.use();
+    GLuint p = m_shader.id();
+
+    glm::mat4 I(1.0f);
+    setMat4(p, "uV", I);
+    setMat4(p, "uP", I);
+    setMat4(p, "uM", I);
+
+    setInt(p, "uUseTex", 1);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    setInt(p, "uTex", 0);
+
+    setVec3(p, "uAlbedo", glm::vec3(1.0f));
+    setFloat(p, "uAmbientK", 1.0f);
+    setFloat(p, "uDiffuseK", 0.0f);
+    setFloat(p, "uSpecK", 0.0f);
+
+    static GLuint VAO = 0, VBO, EBO;
+    if (VAO == 0) {
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glGenBuffers(1, &EBO);
+        static float vertices[] = {
+            -1,-1,0,  0,0,1,  0,0,  
+             1,-1,0,  0,0,1,  1,0,  
+             1, 1,0,  0,0,1,  1,1, 
+            -1, 1,0,  0,0,1,  0,1
+        };
+        unsigned int indices[] = {0,1,2, 0,2,3};
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+        
+        // aPos: location 0
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        // aNormal: location 1
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(3*sizeof(float)));
+        glEnableVertexAttribArray(1);
+        // aUV: location 2
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(6*sizeof(float)));
+        glEnableVertexAttribArray(2);
+    }
+
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+}
+
 void Renderer::setCamera(const glm::mat4& V, const glm::mat4& P, const glm::vec3& camPos) {
     m_V = V; m_P = P; m_camPos = camPos;
 }
@@ -158,44 +213,105 @@ void Renderer::drawUIText(float x, float y, const std::string& text, float scale
     float py = y;
     
     for (char c : text) {
-        if (c == 'R') {
-            // R = left bar + top + right-top + middle + diagonal leg
-            drawUIQuad(px, py, blockW, labelH, color);                      // left
-            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color);  // top
+        if (c == 'P') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color); // top
             drawUIQuad(px+labelW-blockW, py+labelH*0.5f, blockW, labelH*0.5f, color); // right-top
             drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW, blockW, color); // middle
-            drawUIQuad(px+labelW*0.5f, py, blockW*1.5f, labelH*0.5f, color); // diagonal leg
-        }
-        else if (c == 'E') {
-            // E = left + top + middle + bottom
-            drawUIQuad(px, py, blockW, labelH, color);                      // left
-            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color);  // top
-            drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW, blockW, color); // middle
-            drawUIQuad(px+blockW, py, labelW-blockW, blockW, color);        // bottom
-        }
-        else if (c == 'S') {
-            // S = top + left-top + middle + right-bottom + bottom
-            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color);  // top
-            drawUIQuad(px, py+labelH*0.5f, blockW, labelH*0.5f, color);     // left-top
-            drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW, blockW, color); // middle
-            drawUIQuad(px+labelW-blockW, py, blockW, labelH*0.5f, color);   // right-bottom
-            drawUIQuad(px+blockW, py, labelW-blockW, blockW, color);        // bottom
-        }
-        else if (c == 'T') {
-            // T = top + stem
-            drawUIQuad(px, py+labelH-blockW, labelW, blockW, color);        // top
-            drawUIQuad(px+labelW*0.5f-blockW*0.5f, py, blockW, labelH-blockW, color); // stem
         }
         else if (c == 'A') {
-            // A = left + right + top + middle
-            drawUIQuad(px, py, blockW, labelH, color);                      // left
-            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color);        // right
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color); // right
             drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW*2, blockW, color); // top
-            drawUIQuad(px+blockW, py+labelH*0.5f, labelW-blockW*2, blockW, color);   // middle
+            drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW*2, blockW, color); // middle
+        }
+        else if (c == 'U') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color); // right
+            drawUIQuad(px+blockW, py, labelW-blockW*2, blockW, color); // bottom
+        }
+        else if (c == 'S') {
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color); // top
+            drawUIQuad(px, py+labelH*0.5f, blockW, labelH*0.5f, color); // left-top
+            drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW*2, blockW, color); // middle
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH*0.5f, color); // right-bottom
+            drawUIQuad(px, py, labelW-blockW, blockW, color); // bottom
+        }
+        else if (c == 'E') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color); // top
+            drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW, blockW, color); // middle
+            drawUIQuad(px+blockW, py, labelW-blockW, blockW, color); // bottom
+        }
+        else if (c == 'D') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW*2, blockW, color); // top
+            drawUIQuad(px+blockW, py, labelW-blockW*2, blockW, color); // bottom
+            drawUIQuad(px+labelW-blockW, py+blockW, blockW, labelH-blockW*2, color); // right
+        }
+        else if (c == 'G') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color); // top
+            drawUIQuad(px+blockW, py, labelW-blockW, blockW, color); // bottom
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH*0.5f, color); // right-bottom
+            drawUIQuad(px+labelW*0.5f, py+labelH*0.5f-blockW*0.5f, labelW*0.5f, blockW, color); // short middle
+        }
+        else if (c == 'M') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color); // right
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW*2, blockW, color); // top
+            drawUIQuad(px+labelW*0.5f-blockW*0.5f, py+labelH*0.5f, blockW, labelH*0.5f, color); // middle stem
+        }
+        else if (c == 'O') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color); // right
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW*2, blockW, color); // top
+            drawUIQuad(px+blockW, py, labelW-blockW*2, blockW, color); // bottom
+        }
+        else if (c == 'V') {
+            drawUIQuad(px, py+blockW*2.0f, blockW, labelH-blockW*2.0f, color); // left
+            drawUIQuad(px+labelW-blockW, py+blockW*2.0f, blockW, labelH-blockW*2.0f, color); // right
+            drawUIQuad(px+blockW, py, labelW-blockW*2, blockW*2.0f, color); // bottom
+        }
+        else if (c == 'W') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color); // right
+            drawUIQuad(px+blockW, py, labelW-blockW*2, blockW, color); // bottom
+            drawUIQuad(px+labelW*0.5f-blockW*0.5f, py, blockW, labelH*0.5f, color); // middle stem
+        }
+        else if (c == 'N') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+labelW-blockW, py, blockW, labelH, color); // right
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW*2, blockW, color); // top-leftish join
+        }
+        else if (c == 'R') {
+            drawUIQuad(px, py, blockW, labelH, color); // left
+            drawUIQuad(px+blockW, py+labelH-blockW, labelW-blockW, blockW, color); // top
+            drawUIQuad(px+labelW-blockW, py+labelH*0.5f, blockW, labelH*0.5f, color); // right-top
+            drawUIQuad(px+blockW, py+labelH*0.5f-blockW*0.5f, labelW-blockW, blockW, color); // middle
+            drawUIQuad(px+labelW-blockW*1.5f, py, blockW*1.5f, labelH*0.5f, color); // leg
+        }
+        else if (c == 'T') {
+            drawUIQuad(px, py+labelH-blockW, labelW, blockW, color); // top
+            drawUIQuad(px+labelW*0.5f-blockW*0.5f, py, blockW, labelH-blockW, color); // stem
         }
         else if (c == 'I') {
-            // I = vertical stem
             drawUIQuad(px+labelW*0.5f-blockW*0.5f, py, blockW, labelH, color); // stem
+        }
+        else if (c == '!') {
+            drawUIQuad(px+labelW*0.5f-blockW*0.5f, py+blockW*2.0f, blockW, labelH-blockW*2.0f, color); // stem
+            drawUIQuad(px+labelW*0.5f-blockW*0.5f, py, blockW, blockW, color); // dot
+        }
+        else if (c == '/') {
+            // Diagonal line from bottom-left to top-right
+            // We can approximate it with several small quads or one rotated (but drawUIQuad is axis-aligned)
+            // Let's use a simple stepped approach or a single box if Renderer supported rotation.
+            // Actually, I'll just draw a few blocks to make it look like a slash.
+            drawUIQuad(px, py, blockW, blockW, color);
+            drawUIQuad(px+labelW*0.25f, py+labelH*0.25f, blockW, blockW, color);
+            drawUIQuad(px+labelW*0.5f, py+labelH*0.5f, blockW, blockW, color);
+            drawUIQuad(px+labelW*0.75f, py+labelH*0.75f, blockW, blockW, color);
+            drawUIQuad(px+labelW-blockW, py+labelH-blockW, blockW, blockW, color);
         }
         else if (c == ' ') {
             // space - no drawing
