@@ -12,6 +12,7 @@ public:
     void shutdown();
 
     void beginFrame(int fbW, int fbH);
+    void drawBackground(unsigned int textureId);
     void setCamera(const glm::mat4& V, const glm::mat4& P, const glm::vec3& camPos);
 
     void drawMesh(const Mesh& mesh, const glm::vec3& pos, const glm::vec3& size, const glm::vec3& tint = glm::vec3(1.0f));
