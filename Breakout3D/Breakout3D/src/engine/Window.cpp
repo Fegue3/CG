@@ -9,7 +9,7 @@ namespace engine {
 Window::Window() {}
 Window::~Window() { destroy(); }
 
-bool Window::create(int width, int height, const std::string& title) {
+bool Window::create(int width, int height, const std::string& title, bool fullscreen) {
     if (!glfwInit()) {
         std::cerr << "Failed to init GLFW\n";
         return false;
@@ -17,9 +17,10 @@ bool Window::create(int width, int height, const std::string& title) {
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
 
-    GLFWwindow* w = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+    GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+    GLFWwindow* w = glfwCreateWindow(width, height, title.c_str(), monitor, nullptr);
     if (!w) {
         std::cerr << "Failed to create window\n";
         glfwTerminate();
