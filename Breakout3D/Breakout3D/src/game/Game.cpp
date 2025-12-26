@@ -554,14 +554,34 @@ void Game::render() {
         float panelY = (fbH - panelH) * 0.5f;
         
         if (m_state.mode == GameMode::PAUSED) {
-            // Just text for Pause - Higher centered
+            // 1. Full screen masked overlay (dimmed outside, clear inside)
             std::string msg = "PAUSED";
-            float tw = msg.size() * 20.0f + (msg.size() - 1) * 6.0f;
-            float tx = (fbW - tw * 1.5f) * 0.5f;
-            m_renderer.drawUIText(tx, fbH * 0.65f, msg, 1.5f, glm::vec3(1, 1, 1));
+            float scale = 3.0f; 
+            float charW = 14.0f * scale;
+            float charSpacing = 4.0f * scale;
+            float tw = msg.size() * charW + (msg.size() - 1) * charSpacing;
+            float th = 20.0f * scale;
+            
+            float tx = (fbW - tw) * 0.5f;
+            float ty = (fbH - th) * 0.5f; 
+            float padding = 40.0f;
+
+            // Hole should exactly match the box we draw later
+            glm::vec2 maskMin(tx - padding, ty - padding);
+            glm::vec2 maskMax(tx + tw + padding, ty + th + padding);
+            m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0, 0, 0, 0.70f), true, maskMin, maskMax); // Darker dimming
+
+            // 2. Pause box and text - Fully opaque box for maximum visibility
+            m_renderer.drawUIQuad(tx - padding, ty - padding, tw + padding * 2, th + padding * 2, glm::vec4(0.06f, 0.06f, 0.06f, 1.0f));
+            m_renderer.drawUIText(tx, ty, msg, scale, glm::vec3(1, 1, 1));
         } else {
-            // Panel for Game Over / Win
-            m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec3(0.08f, 0.08f, 0.08f));
+            // Full screen masked overlay for Game Over / Win
+            glm::vec2 maskMin(panelX, panelY);
+            glm::vec2 maskMax(panelX + panelW, panelY + panelH);
+            m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0, 0, 0, 0.80f), true, maskMin, maskMax);
+
+            // Panel for Game Over / Win - Fully opaque
+            m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.08f, 1.0f));
             
             std::string title = (m_state.mode == GameMode::GAME_OVER) ? "GAME OVER" : "WINNER!";
             float tw = title.size() * 20.0f + (title.size() - 1) * 6.0f;
@@ -576,8 +596,8 @@ void Game::render() {
             float btnX_right = btnX_left + btnW + btnGap;
             float btnY = panelY + 40.0f;
             
-            m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec3(0.2f, 0.8f, 0.2f));
-            m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec3(0.8f, 0.2f, 0.2f));
+            m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+            m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
             
             std::string leftLabel = "RESTART";
             std::string rightLabel = "SAIR";
@@ -603,8 +623,8 @@ void Game::render() {
             {0.15f, 0.15f, 0.2f}, // None (Dark Blueish)
             {0.2f, 0.4f, 0.9f}, // Blueish
             {0.6f, 0.2f, 0.9f}, // Purplish
-            {0.9f, 0.2f, 0.3f}, // Redish
-            {0.2f, 0.8f, 0.4f}  // Greenish
+            {0.2f, 0.8f, 0.4f}, // Greenish (Swapped)
+            {0.9f, 0.2f, 0.3f}  // Redish (Swapped)
         };
 
         for (int i = -1; i < 4; i++) {
@@ -614,12 +634,12 @@ void Game::render() {
             // Draw border if selected
             if (m_state.currentBg == i) {
                 float border = 2.0f;
-                m_renderer.drawUIQuad(bx - border, startY - border, boxSize + border * 2.0f, boxSize + border * 2.0f, glm::vec3(1, 1, 1));
+                m_renderer.drawUIQuad(bx - border, startY - border, boxSize + border * 2.0f, boxSize + border * 2.0f, glm::vec4(1, 1, 1, 1.0f));
             } else {
                 col *= 0.6f;
             }
 
-            m_renderer.drawUIQuad(bx, startY, boxSize, boxSize, col);
+            m_renderer.drawUIQuad(bx, startY, boxSize, boxSize, glm::vec4(col, 1.0f));
 
             if (i == -1) {
                 // Draw "/" inside the first box
