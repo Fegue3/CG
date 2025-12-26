@@ -6,6 +6,7 @@
 namespace game {
 
 enum class GameMode {
+    MENU,
     PLAYING,
     PAUSED,
     GAME_OVER,
@@ -32,7 +33,7 @@ struct PowerUp {
 };
 
 struct GameState {
-    GameMode mode = GameMode::PLAYING;
+    GameMode mode = GameMode::MENU;
 
     int lives = 3;
 
@@ -54,6 +55,10 @@ struct GameState {
     bool mouseWasDown = false;
     int cameraMode = 1;
     int currentBg = -1;
+
+    // Menu state
+    int selectedMenuOption = 0; // 0 = Play, 1 = Instructions, 2 = Exit
+    bool showInstructions = false;
 };
 
 } // namespace game
