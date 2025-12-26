@@ -20,6 +20,9 @@ public:
     void render();
 
 private:
+    void generateBricks(int waveNumber = 0);  // 0 = normal, >0 = endless wave
+    void spawnIncrementalBricks(int count, int waveNumber);  // Spawn additional bricks mid-wave
+    
     engine::Window& m_window;
     engine::Time& m_time;
     engine::Renderer& m_renderer;
