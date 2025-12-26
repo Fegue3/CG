@@ -66,10 +66,121 @@ static bool pointInRectPx(float px, float py, float x, float y, float w, float h
 Game::Game(engine::Window& window, engine::Time& time, engine::Renderer& renderer, GameAssets& assets)
 : m_window(window), m_time(time), m_renderer(renderer), m_assets(assets) {}
 
+void Game::generateBricks(int waveNumber) {
+    m_state.bricks.clear();
+    
+    const int cols = 12;
+    int rows = 9;  // Default for normal mode
+
+    // Adjust difficulty for endless mode
+    if (waveNumber > 0) {
+        // Endless mode: increase difficulty each wave
+        rows = 9 + (waveNumber / 2);               // Add rows every 2 waves (max 14 at wave 10+)
+    }
+
+    glm::vec3 brickSize(2.95f, 0.7f, 1.30f); 
+    float gapX = 0.04f;
+    float gapZ = 0.03f;
+
+    float startZ = m_cfg.arenaMinZ + 0.85f;
+    float totalW = cols * brickSize.x + (cols - 1) * gapX;
+    float leftX  = -totalW * 0.5f + brickSize.x * 0.5f;
+
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            Brick b;
+            b.size = brickSize;
+            b.alive = true;
+
+            b.pos.x = leftX + c * (brickSize.x + gapX);
+            b.pos.y = 0.0f;
+            b.pos.z = startZ + r * (brickSize.z + gapZ);
+
+            // For normal mode: 2 roxo, 2 azul, 2 amarelo, 3 verde
+            // For endless mode: all bricks have scaled HP based on wave
+            if (waveNumber == 0) {
+                // Normal mode: fixed distribution
+                if (r <= 1)      b.maxHp = b.hp = 4;
+                else if (r <= 3) b.maxHp = b.hp = 3;
+                else if (r <= 5) b.maxHp = b.hp = 2;
+                else             b.maxHp = b.hp = 1;
+            } else {
+                // Endless mode: wave-based HP
+                // Distribute maxHp across rows (harder at top)
+                int hpBonus = waveNumber / 5;  // +1 HP every 5 waves
+                if (r < rows / 3)           b.maxHp = b.hp = std::min(6, 4 + hpBonus);
+                else if (r < 2 * rows / 3) b.maxHp = b.hp = std::min(6, 3 + hpBonus);
+                else if (r < rows - 2)     b.maxHp = b.hp = std::min(6, 2 + hpBonus);
+                else                        b.maxHp = b.hp = std::min(6, 1 + hpBonus);
+            }
+
+            m_state.bricks.push_back(b);
+        }
+    }
+}
+
+void Game::spawnIncrementalBricks(int count, int waveNumber) {
+    // Spawn new bricks by inserting rows at the top, pushing existing bricks down
+    glm::vec3 brickSize(2.95f, 0.7f, 1.30f);
+    float gapX = 0.04f;
+    float gapZ = 0.03f;
+
+    const int cols = 12;
+    float totalW = cols * brickSize.x + (cols - 1) * gapX;
+    float leftX = -totalW * 0.5f + brickSize.x * 0.5f;
+    float stepZ = brickSize.z + gapZ;
+    float topZ = m_cfg.arenaMinZ + 0.85f;  // reference for row 0
+
+    // Determine how many full rows to insert at the top
+    int rowsToInsert = (count + cols - 1) / cols; // ceil(count/cols)
+
+    // Push all existing alive bricks down by rowsToInsert
+    float push = rowsToInsert * stepZ;
+    for (auto& br : m_state.bricks) {
+        if (!br.alive) continue;
+        br.pos.z += push;
+    }
+
+    int totalRowsBefore = m_state.endlessRowsSpawned;
+
+    for (int i = 0; i < count; ++i) {
+        Brick b;
+        b.size = brickSize;
+        b.alive = true;
+
+        int col = i % cols;
+        int rowLocal = (i / cols); // new rows start at 0 at the top
+        int rowGlobal = totalRowsBefore + rowLocal;
+
+        b.pos.x = leftX + col * (brickSize.x + gapX);
+        b.pos.y = 0.0f;
+        b.pos.z = topZ + rowLocal * stepZ;  // place below the current top
+
+        // Difficulty based on cumulative rows spawned in endless
+        int hp = 1 + (rowGlobal / 20); // every 20 rows increases HP by 1
+        b.maxHp = b.hp = std::min(6, hp);
+
+        m_state.bricks.push_back(b);
+    }
+
+    m_state.endlessRowsSpawned = totalRowsBefore + rowsToInsert;
+
+    // Spawn executed; no HUD ping
+}
+
 void Game::init() {
     srand(static_cast<unsigned int>(time(nullptr)));
     m_state.mode = GameMode::PLAYING;
     m_state.lives = 3;
+    m_state.bricksDestroyedThisWave = 0;
+    m_state.endlessRowsSpawned = 0;
+    m_state.score = 0;
+    
+    // For endless mode, wave is already set before calling init()
+    // For normal mode, reset wave to 1
+    if (m_state.gameType == GameType::NORMAL) {
+        m_state.wave = 1;
+    }
 
     m_state.paddlePos = glm::vec3(
         0.0f, 0.0f,
@@ -86,42 +197,16 @@ void Game::init() {
     m_state.slowTimer = 0.0f;
 
     m_state.brickHitCooldown = 0.0f;
-    m_state.bricks.clear();
 
-    // ✅ MAIS COLUNAS + 3 verdes e 2 do resto (total 9 filas)
-    const int cols = 12;
-    const int rows = 9; // 2 roxo + 2 azul + 2 amarelo + 3 verde
-
-    // ✅ Slight gaps (0.05) on the sides and depth for better aesthetics.
-    // Width: 12 * 2.95 = 35.4 (vs 36.0 arena) => 0.3 gap on each side.
-    glm::vec3 brickSize(2.95f, 0.7f, 1.30f); 
-    float gapX = 0.04f;
-    float gapZ = 0.03f;
-
-    float startZ = m_cfg.arenaMinZ + 0.85f;
-
-    float totalW = cols * brickSize.x + (cols - 1) * gapX;
-    float leftX  = -totalW * 0.5f + brickSize.x * 0.5f;
-
-    for (int r = 0; r < rows; ++r) {
-        for (int c = 0; c < cols; ++c) {
-            Brick b;
-            b.size = brickSize;
-            b.alive = true;
-
-            b.pos.x = leftX + c * (brickSize.x + gapX);
-            b.pos.y = 0.0f;
-            b.pos.z = startZ + r * (brickSize.z + gapZ);
-
-            // ✅ 2 roxo, 2 azul, 2 amarelo, 3 verde
-            // r: 0-1 => 4, 2-3 => 3, 4-5 => 2, 6-8 => 1
-            if (r <= 1)      b.maxHp = b.hp = 4;
-            else if (r <= 3) b.maxHp = b.hp = 3;
-            else if (r <= 5) b.maxHp = b.hp = 2;
-            else             b.maxHp = b.hp = 1;
-
-            m_state.bricks.push_back(b);
-        }
+    // Generate bricks (0 for normal, waveNumber for endless)
+    int waveToGenerate = (m_state.gameType == GameType::ENDLESS) ? m_state.wave : 0;
+    int rowsInitial = 9;
+    if (m_state.gameType == GameType::ENDLESS) {
+        rowsInitial = 9 + (m_state.wave / 2);
+    }
+    generateBricks(waveToGenerate);
+    if (m_state.gameType == GameType::ENDLESS) {
+        m_state.endlessRowsSpawned = rowsInitial;
     }
 }
 
@@ -137,7 +222,7 @@ void Game::update(const engine::Input& input) {
 
         // Menu button positions
         float panelW = 500.0f;
-        float panelH = 400.0f;
+        float panelH = 480.0f;
         float panelX = (fbW - panelW) * 0.5f;
         float panelY = (fbH - panelH) * 0.5f;
 
@@ -146,9 +231,10 @@ void Game::update(const engine::Input& input) {
         float btnX = panelX + (panelW - btnW) * 0.5f;
         
         // Button positions (from top to bottom)
-        float btn2Y = panelY + 280.0f; // Instructions (top)
-        float btn1Y = panelY + 170.0f; // Play (middle)
-        float btn3Y = panelY + 60.0f;  // Exit (bottom)
+        float btn1Y = panelY + 360.0f; // Normal Mode (top)
+        float btn2Y = panelY + 250.0f; // Endless Mode
+        float btn3Y = panelY + 140.0f; // Instructions
+        float btn4Y = panelY + 30.0f;  // Exit (bottom)
 
         // If instructions panel is shown, only allow clicking on the panel or outside to close
         if (m_state.showInstructions) {
@@ -167,18 +253,27 @@ void Game::update(const engine::Input& input) {
         }
 
         if (click) {
-            // Play button
+            // Normal Mode button
             if (pointInRectPx(px, py, btnX, btn1Y, btnW, btnH)) {
                 m_state.showInstructions = false;
+                m_state.gameType = GameType::NORMAL;
+                init();
+                return;
+            }
+            // Endless Mode button
+            if (pointInRectPx(px, py, btnX, btn2Y, btnW, btnH)) {
+                m_state.showInstructions = false;
+                m_state.gameType = GameType::ENDLESS;
+                m_state.wave = 1;
                 init();
                 return;
             }
             // Instructions button
-            if (pointInRectPx(px, py, btnX, btn2Y, btnW, btnH)) {
+            if (pointInRectPx(px, py, btnX, btn3Y, btnW, btnH)) {
                 m_state.showInstructions = true;
             }
             // Exit button
-            if (pointInRectPx(px, py, btnX, btn3Y, btnW, btnH)) {
+            if (pointInRectPx(px, py, btnX, btn4Y, btnW, btnH)) {
                 m_window.requestClose();
                 return;
             }
@@ -220,10 +315,22 @@ void Game::update(const engine::Input& input) {
 
     if (input.keyPressed(engine::Key::K1)) m_state.cameraMode = 1;
     if (input.keyPressed(engine::Key::K2)) m_state.cameraMode = 2;
+    if (m_state.gameType == GameType::ENDLESS && input.keyPressed(engine::Key::K3)) {
+        // Debug: force-spawn a full top row to keep the wall tidy
+        spawnIncrementalBricks(12, m_state.wave);
+        m_state.pendingSpawnBricks = 0;
+        m_state.endlessSpawnCooldown = 0.5f; // avoid immediate repeats
+        m_state.endlessAutoTimer = 0.0f;
+    }
     if (m_state.brickHitCooldown > 0.0f)
         m_state.brickHitCooldown = std::max(0.0f, m_state.brickHitCooldown - dt);
+    if (m_state.endlessSpawnCooldown > 0.0f)
+        m_state.endlessSpawnCooldown = std::max(0.0f, m_state.endlessSpawnCooldown - dt);
+    if (m_state.gameType == GameType::ENDLESS)
+        m_state.endlessAutoTimer += dt;
 
-    if (m_state.mode == GameMode::PLAYING && !anyBricksAlive(m_state)) {
+    // Only check for WIN in normal mode (endless never wins)
+    if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::NORMAL && !anyBricksAlive(m_state)) {
         m_state.mode = GameMode::WIN;
         m_state.balls.clear();
     }
@@ -248,10 +355,9 @@ void Game::update(const engine::Input& input) {
         float btnY = panelY + 40.0f;
 
         if (click) {
-            // Left button: Restart (go back to menu)
+            // Left button: Restart game immediately
             if (pointInRectPx(px, py, btnX_left, btnY, btnW, btnH)) { 
-                m_state.mode = GameMode::MENU;
-                m_state.showInstructions = false;
+                init();  // Start new game right away
                 return; 
             }
             // Right button: Back to Menu
@@ -361,6 +467,23 @@ void Game::update(const engine::Input& input) {
                     if (br.hp <= 0) {
                         br.alive = false;
                         spawnPowerUp(m_state, br.pos, m_cfg.powerUpChance);
+                        
+                        // Add score based on brick HP and wave
+                        int baseScore = br.maxHp * 100;  // More points for harder bricks
+                        int waveBonus = (m_state.gameType == GameType::ENDLESS) ? m_state.wave * 50 : 0;
+                        m_state.score += baseScore + waveBonus;
+                        
+                        // Count destroyed bricks for endless mode spawning
+                        if (m_state.gameType == GameType::ENDLESS) {
+                            m_state.bricksDestroyedThisWave++;
+
+                            // Queue new bricks whenever threshold is reached (spawn after loop)
+                            if (m_state.bricksDestroyedThisWave >= 30) { // spawn a row every 30 bricks destroyed
+                                m_state.pendingSpawnBricks += 12; // add full rows
+                                // Keep remainder in case multiple bricks are destroyed rapidly
+                                m_state.bricksDestroyedThisWave -= 30;
+                            }
+                        }
                     }
 
                     glm::vec3 diff = b.pos - br.pos;
@@ -387,6 +510,27 @@ void Game::update(const engine::Input& input) {
             m_state.balls.erase(m_state.balls.begin() + i);
         } else {
             i++;
+        }
+    }
+
+    // Perform any queued brick spawns now (safe — outside iteration loops)
+    if (m_state.gameType == GameType::ENDLESS && m_state.pendingSpawnBricks > 0) {
+        spawnIncrementalBricks(m_state.pendingSpawnBricks, m_state.wave);
+        m_state.pendingSpawnBricks = 0;
+    }
+
+    // (Removed auto/fallback spawns; now spawning is strictly tied to bricks destroyed or manual debug key)
+
+    // Lose condition: a brick reached the paddle zone
+    if (m_state.gameType == GameType::ENDLESS) {
+        float limitZ = m_state.paddlePos.z - 0.5f; // small margin above paddle
+        for (const auto& br : m_state.bricks) {
+            if (!br.alive) continue;
+            if (br.pos.z + br.size.z * 0.5f >= limitZ) {
+                m_state.mode = GameMode::GAME_OVER;
+                m_state.balls.clear();
+                break;
+            }
         }
     }
 
@@ -462,7 +606,7 @@ void Game::render() {
 
         // Menu panel
         float panelW = 500.0f;
-        float panelH = 400.0f;
+        float panelH = 480.0f;
         float panelX = (fbW - panelW) * 0.5f;
         float panelY = (fbH - panelH) * 0.5f;
 
@@ -481,25 +625,31 @@ void Game::render() {
         float btnH = 70.0f;
         float btnX = panelX + (panelW - btnW) * 0.5f;
 
-        // Button positions: Instructions, Play, Exit
-        float btn2Y = panelY + 280.0f; // Instructions
-        float btn1Y = panelY + 170.0f; // Play
-        float btn3Y = panelY + 60.0f;  // Exit
+        // Button positions (from top to bottom)
+        float btn1Y = panelY + 360.0f; // Normal Mode (top)
+        float btn2Y = panelY + 250.0f; // Endless Mode
+        float btn3Y = panelY + 140.0f; // Instructions
+        float btn4Y = panelY + 30.0f;  // Exit (bottom)
 
-        // Play button
-        m_renderer.drawUIQuad(btnX, btn1Y, btnW, btnH, glm::vec4(0.2f, 0.7f, 0.3f, 1.0f));
-        float playLabelW = 4.0f * 14.0f;
-        m_renderer.drawUIText(btnX + (btnW - playLabelW) * 0.5f, btn1Y + (btnH - 20.0f) * 0.5f, "PLAY", 1.2f, glm::vec3(1, 1, 1));
+        // Normal Mode button
+        m_renderer.drawUIQuad(btnX, btn1Y, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
+        float normalLabelW = 6.0f * 14.0f;
+        m_renderer.drawUIText(btnX + (btnW - normalLabelW) * 0.5f, btn1Y + (btnH - 20.0f) * 0.5f, "NORMAL", 1.0f, glm::vec3(1, 1, 1));
+
+        // Endless Mode button
+        m_renderer.drawUIQuad(btnX, btn2Y, btnW, btnH, glm::vec4(0.8f, 0.5f, 0.2f, 1.0f));
+        float endlessLabelW = 7.0f * 14.0f;
+        m_renderer.drawUIText(btnX + (btnW - endlessLabelW) * 0.5f, btn2Y + (btnH - 20.0f) * 0.5f, "ENDLESS", 1.0f, glm::vec3(1, 1, 1));
 
         // Instructions button
-        m_renderer.drawUIQuad(btnX, btn2Y, btnW, btnH, glm::vec4(0.3f, 0.5f, 0.8f, 1.0f));
+        m_renderer.drawUIQuad(btnX, btn3Y, btnW, btnH, glm::vec4(0.3f, 0.5f, 0.8f, 1.0f));
         float instrLabelW = 12.0f * 14.0f * 0.7f;
-        m_renderer.drawUIText(btnX + (btnW - instrLabelW) * 0.5f, btn2Y + (btnH - 20.0f) * 0.5f, "INSTRUCTIONS", 0.85f, glm::vec3(1, 1, 1));
+        m_renderer.drawUIText(btnX + (btnW - instrLabelW) * 0.5f, btn3Y + (btnH - 20.0f) * 0.5f, "INSTRUCTIONS", 0.85f, glm::vec3(1, 1, 1));
 
         // Exit button
-        m_renderer.drawUIQuad(btnX, btn3Y, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+        m_renderer.drawUIQuad(btnX, btn4Y, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
         float exitLabelW = 4.0f * 14.0f;
-        m_renderer.drawUIText(btnX + (btnW - exitLabelW) * 0.5f, btn3Y + (btnH - 20.0f) * 0.5f, "EXIT", 1.2f, glm::vec3(1, 1, 1));
+        m_renderer.drawUIText(btnX + (btnW - exitLabelW) * 0.5f, btn4Y + (btnH - 20.0f) * 0.5f, "EXIT", 1.2f, glm::vec3(1, 1, 1));
 
         // Show instructions if toggled
         if (m_state.showInstructions) {
@@ -773,6 +923,23 @@ void Game::render() {
             m_renderer.drawUIText(btnX_left + (btnW - ltw) * 0.5f,  btnY + (btnH - 20.0f) * 0.5f, leftLabel, 1.0f, glm::vec3(1, 1, 1));
             m_renderer.drawUIText(btnX_right + (btnW - rtw) * 0.5f, btnY + (btnH - 20.0f) * 0.5f, rightLabel, 1.0f, glm::vec3(1, 1, 1));
         }
+    }
+
+    // --- SCORE AND WAVE HUD ---
+    {
+        float padX = 22.0f;
+        float padTop = 100.0f;
+
+        // Score display
+        std::string scoreStr = "Score: " + std::to_string(m_state.score);
+        m_renderer.drawUIText(padX, (float)fbH - padTop, scoreStr, 1.0f, glm::vec3(1.0f, 0.8f, 0.2f));
+
+        // Wave + Destroyed display (only in endless mode)
+        if (m_state.gameType == GameType::ENDLESS) {
+            std::string waveStr = "Wave: " + std::to_string(m_state.wave);
+            m_renderer.drawUIText(padX, (float)fbH - padTop - 35.0f, waveStr, 1.0f, glm::vec3(0.2f, 0.8f, 1.0f));
+        }
+
     }
 
     // --- BG Selector HUD ---
