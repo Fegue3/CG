@@ -25,7 +25,8 @@ public:
     void endUI();
 
 private:
-    Shader m_shader;
+    Shader m_worldShader;  // For 3D meshes with Phong lighting
+    Shader m_uiShader;     // For UI elements with flat color
 
     glm::mat4 m_V{1.0f}, m_P{1.0f};
     glm::vec3 m_camPos{0,0,0};

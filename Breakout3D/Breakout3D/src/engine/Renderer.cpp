@@ -26,13 +26,21 @@ bool Renderer::init() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    if (!m_shader.load("assets/shaders/basic_phong.vert", "assets/shaders/basic_phong.frag"))
+    
+    // Load world shader (Phong lighting for 3D meshes)
+    if (!m_worldShader.load("assets/shaders/world_phong.vert", "assets/shaders/world_phong.frag"))
         return false;
+    
+    // Load UI shader (flat color for UI elements)
+    if (!m_uiShader.load("assets/shaders/ui_flat.vert", "assets/shaders/ui_flat.frag"))
+        return false;
+    
     return true;
 }
 
 void Renderer::shutdown() {
-    m_shader.destroy();
+    m_worldShader.destroy();
+    m_uiShader.destroy();
 }
 
 void Renderer::beginFrame(int fbW, int fbH) {
@@ -50,8 +58,8 @@ void Renderer::beginFrame(int fbW, int fbH) {
 
 void Renderer::drawBackground(unsigned int textureId) {
     glDisable(GL_DEPTH_TEST);
-    m_shader.use();
-    GLuint p = m_shader.id();
+    m_uiShader.use();  // Use UI shader for background
+    GLuint p = m_uiShader.id();
 
     glm::mat4 I(1.0f);
     setMat4(p, "uV", I);
@@ -64,9 +72,8 @@ void Renderer::drawBackground(unsigned int textureId) {
     setInt(p, "uTex", 0);
 
     setVec3(p, "uAlbedo", glm::vec3(1.0f));
-    setFloat(p, "uAmbientK", 1.0f);
-    setFloat(p, "uDiffuseK", 0.0f);
-    setFloat(p, "uSpecK", 0.0f);
+    setFloat(p, "uAlpha", 1.0f);
+    setInt(p, "uUseMask", 0);  // No masking for background
 
     static GLuint VAO = 0, VBO, EBO;
     if (VAO == 0) {
@@ -108,8 +115,8 @@ void Renderer::setCamera(const glm::mat4& V, const glm::mat4& P, const glm::vec3
 }
 
 void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& M, const glm::vec3& tint) {
-    m_shader.use();
-    GLuint p = m_shader.id();
+    m_worldShader.use();  // Use world shader for 3D meshes
+    GLuint p = m_worldShader.id();
 
     setMat4(p, "uV", m_V);
     setMat4(p, "uP", m_P);
@@ -166,8 +173,8 @@ void Renderer::beginUI(int fbW, int fbH) {
 }
 
 void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& color, bool useMask, glm::vec2 maskMin, glm::vec2 maskMax) {
-    m_shader.use();
-    GLuint p = m_shader.id();
+    m_uiShader.use();  // Use UI shader for UI elements
+    GLuint p = m_uiShader.id();
 
     glm::mat4 M = glm::translate(glm::mat4(1.0f), glm::vec3(x + w*0.5f, y + h*0.5f, 0.0f));
     M = glm::scale(M, glm::vec3(w, h, 1.0f));
@@ -180,11 +187,6 @@ void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& c
     setVec3(p, "uAlbedo", glm::vec3(color));
     setFloat(p, "uAlpha", color.a);
     
-    // UI should be flat and crisp
-    setFloat(p, "uAmbientK", 1.0f);
-    setFloat(p, "uDiffuseK", 0.0f);
-    setFloat(p, "uSpecK",    0.0f);
-
     setInt(p, "uUseMask", useMask ? 1 : 0);
     if (useMask) {
         setVec2(p, "uMaskMin", maskMin);
@@ -196,9 +198,12 @@ void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& c
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
 
+    // pos(3) + normal(3) + uv(2) = 8 floats per vertex
     float vertices[] = {
-        -0.5f,-0.5f,0,  0.5f,-0.5f,0,
-         0.5f, 0.5f,0, -0.5f, 0.5f,0
+        -0.5f,-0.5f,0,  0,0,1,  0,0,
+         0.5f,-0.5f,0,  0,0,1,  1,0,
+         0.5f, 0.5f,0,  0,0,1,  1,1,
+        -0.5f, 0.5f,0,  0,0,1,  0,1
     };
     unsigned int indices[] = {0,1,2, 0,2,3};
 
@@ -208,8 +213,15 @@ void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& c
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);
+    // aPos (location 0)
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,8*sizeof(float),(void*)0);
     glEnableVertexAttribArray(0);
+    // aNormal (location 1) - required but unused by UI shader
+    glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,8*sizeof(float),(void*)(3*sizeof(float)));
+    glEnableVertexAttribArray(1);
+    // aUV (location 2)
+    glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,8*sizeof(float),(void*)(6*sizeof(float)));
+    glEnableVertexAttribArray(2);
 
     glDrawElements(GL_TRIANGLES,6,GL_UNSIGNED_INT,0);
 
