@@ -311,5 +311,3 @@ Mesmo sem escolher uma biblioteca específica, a arquitectura típica é:
 - power-ups com pickup + on/off
 - endless com warning loop + milestone
 - stingers para eventos grandes
-
-Se tiveres isto tudo bem integrado, o áudio do jogo fica **completo e consistente**.
