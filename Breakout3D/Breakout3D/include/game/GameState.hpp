@@ -13,6 +13,11 @@ enum class GameMode {
     WIN
 };
 
+enum class GameType {
+    NORMAL,   // Normal mode: Win when all bricks destroyed
+    ENDLESS   // Endless mode: Infinite waves, no WIN state
+};
+
 enum class PowerUpType {
     EXPAND,
     EXTRA_BALL,
@@ -34,8 +39,14 @@ struct PowerUp {
 
 struct GameState {
     GameMode mode = GameMode::MENU;
+    GameType gameType = GameType::NORMAL;
 
     int lives = 3;
+    int score = 0;
+    int wave = 1;  // Endless mode wave counter
+    int bricksDestroyedThisWave = 0;  // Counter for endless mode spawning
+    int endlessRowsSpawned = 0;       // Total rows spawned in endless (for HP scaling)
+    int pendingSpawnBricks = 0;       // Defer spawn to avoid mutating while iterating
 
     glm::vec3 paddlePos = {0.0f, 0.0f, 0.0f};
     
@@ -51,13 +62,18 @@ struct GameState {
     // evita múltiplos hits por overlap
     float brickHitCooldown = 0.0f;
 
+    // Debug ping: shows a HUD flash when bricks spawn
+    float spawnPingTimer = 0.0f;
+    float endlessSpawnCooldown = 0.0f; // seconds between auto spawns
+    float endlessAutoTimer = 0.0f;      // periodic auto-spawn timer
+
     // UI click edge
     bool mouseWasDown = false;
     int cameraMode = 1;
     int currentBg = -1;
 
     // Menu state
-    int selectedMenuOption = 0; // 0 = Play, 1 = Instructions, 2 = Exit
+    int selectedMenuOption = 0; // 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
     bool showInstructions = false;
 };
 
