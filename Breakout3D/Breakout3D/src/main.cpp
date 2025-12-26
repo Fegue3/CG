@@ -25,7 +25,7 @@ int main() {
 
     // ✅ game recebe assets
     game::Game game(window, time, renderer, assets);
-    game.init();
+    // Don't call init() here - let the game start at MENU state
 
     while (!window.shouldClose()) {
         time.tick();
