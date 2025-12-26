@@ -128,6 +128,65 @@ void Game::init() {
 void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
+    // =========== MENU LOGIC ===========
+    if (m_state.mode == GameMode::MENU) {
+        auto [fbW, fbH] = m_window.getFramebufferSize();
+        auto [px, py_raw] = input.mousePosFbPx();
+        float py = (float)fbH - py_raw;
+        bool click = input.mousePressed(engine::MouseButton::Left);
+
+        // Menu button positions
+        float panelW = 500.0f;
+        float panelH = 400.0f;
+        float panelX = (fbW - panelW) * 0.5f;
+        float panelY = (fbH - panelH) * 0.5f;
+
+        float btnW = 200.0f;
+        float btnH = 70.0f;
+        float btnX = panelX + (panelW - btnW) * 0.5f;
+        
+        // Button positions (from top to bottom)
+        float btn2Y = panelY + 280.0f; // Instructions (top)
+        float btn1Y = panelY + 170.0f; // Play (middle)
+        float btn3Y = panelY + 60.0f;  // Exit (bottom)
+
+        // If instructions panel is shown, only allow clicking on the panel or outside to close
+        if (m_state.showInstructions) {
+            float instrW = 600.0f;
+            float instrH = 320.0f;
+            float instrX = (fbW - instrW) * 0.5f;
+            float instrY = (fbH - instrH) * 0.5f;
+
+            if (click) {
+                // Click outside the instructions panel = close it
+                if (!pointInRectPx(px, py, instrX, instrY, instrW, instrH)) {
+                    m_state.showInstructions = false;
+                }
+            }
+            return;
+        }
+
+        if (click) {
+            // Play button
+            if (pointInRectPx(px, py, btnX, btn1Y, btnW, btnH)) {
+                m_state.showInstructions = false;
+                init();
+                return;
+            }
+            // Instructions button
+            if (pointInRectPx(px, py, btnX, btn2Y, btnW, btnH)) {
+                m_state.showInstructions = true;
+            }
+            // Exit button
+            if (pointInRectPx(px, py, btnX, btn3Y, btnW, btnH)) {
+                m_window.requestClose();
+                return;
+            }
+        }
+
+        return; // Don't run game logic while in menu
+    }
+
     // Toggle Pause with Escape
     if (input.keyPressed(engine::Key::Escape)) {
         if (m_state.mode == GameMode::PLAYING) m_state.mode = GameMode::PAUSED;
@@ -189,14 +248,16 @@ void Game::update(const engine::Input& input) {
         float btnY = panelY + 40.0f;
 
         if (click) {
-            // Left button: Restart
+            // Left button: Restart (go back to menu)
             if (pointInRectPx(px, py, btnX_left, btnY, btnW, btnH)) { 
-                init(); 
+                m_state.mode = GameMode::MENU;
+                m_state.showInstructions = false;
                 return; 
             }
-            // Right button: Close window
+            // Right button: Back to Menu
             if (pointInRectPx(px, py, btnX_right, btnY, btnW, btnH)) { 
-                m_window.requestClose(); 
+                m_state.mode = GameMode::MENU;
+                m_state.showInstructions = false;
                 return; 
             }
         }
@@ -384,6 +445,108 @@ void Game::update(const engine::Input& input) {
 void Game::render() {
     auto [fbW, fbH] = m_window.getFramebufferSize();
     m_renderer.beginFrame(fbW, fbH);
+
+    // =========== MENU RENDER ===========
+    if (m_state.mode == GameMode::MENU) {
+        // Dark background
+        m_renderer.beginUI(fbW, fbH);
+        m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0.05f, 0.05f, 0.08f, 1.0f));
+
+        // Menu title
+        std::string title = "BREAKOUT 3D";
+        float titleScale = 4.0f;
+        float titleW = title.size() * 14.0f * titleScale;
+        float titleX = (fbW - titleW) * 0.5f;
+        float titleY = fbH - 100.0f;
+        m_renderer.drawUIText(titleX, titleY, title, titleScale, glm::vec3(0.2f, 0.8f, 1.0f));
+
+        // Menu panel
+        float panelW = 500.0f;
+        float panelH = 400.0f;
+        float panelX = (fbW - panelW) * 0.5f;
+        float panelY = (fbH - panelH) * 0.5f;
+
+        m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.12f, 0.95f));
+        
+        // Border
+        float borderThickness = 3.0f;
+        glm::vec4 borderColor(0.2f, 0.8f, 1.0f, 1.0f);
+        m_renderer.drawUIQuad(panelX - borderThickness, panelY - borderThickness, panelW + 2*borderThickness, borderThickness, borderColor);
+        m_renderer.drawUIQuad(panelX - borderThickness, panelY + panelH, panelW + 2*borderThickness, borderThickness, borderColor);
+        m_renderer.drawUIQuad(panelX - borderThickness, panelY, borderThickness, panelH, borderColor);
+        m_renderer.drawUIQuad(panelX + panelW, panelY, borderThickness, panelH, borderColor);
+
+        // Buttons
+        float btnW = 200.0f;
+        float btnH = 70.0f;
+        float btnX = panelX + (panelW - btnW) * 0.5f;
+
+        // Button positions: Instructions, Play, Exit
+        float btn2Y = panelY + 280.0f; // Instructions
+        float btn1Y = panelY + 170.0f; // Play
+        float btn3Y = panelY + 60.0f;  // Exit
+
+        // Play button
+        m_renderer.drawUIQuad(btnX, btn1Y, btnW, btnH, glm::vec4(0.2f, 0.7f, 0.3f, 1.0f));
+        float playLabelW = 4.0f * 14.0f;
+        m_renderer.drawUIText(btnX + (btnW - playLabelW) * 0.5f, btn1Y + (btnH - 20.0f) * 0.5f, "PLAY", 1.2f, glm::vec3(1, 1, 1));
+
+        // Instructions button
+        m_renderer.drawUIQuad(btnX, btn2Y, btnW, btnH, glm::vec4(0.3f, 0.5f, 0.8f, 1.0f));
+        float instrLabelW = 12.0f * 14.0f * 0.7f;
+        m_renderer.drawUIText(btnX + (btnW - instrLabelW) * 0.5f, btn2Y + (btnH - 20.0f) * 0.5f, "INSTRUCTIONS", 0.85f, glm::vec3(1, 1, 1));
+
+        // Exit button
+        m_renderer.drawUIQuad(btnX, btn3Y, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+        float exitLabelW = 4.0f * 14.0f;
+        m_renderer.drawUIText(btnX + (btnW - exitLabelW) * 0.5f, btn3Y + (btnH - 20.0f) * 0.5f, "EXIT", 1.2f, glm::vec3(1, 1, 1));
+
+        // Show instructions if toggled
+        if (m_state.showInstructions) {
+            // Instructions panel
+            float instrW = 600.0f;
+            float instrH = 320.0f;
+            float instrX = (fbW - instrW) * 0.5f;
+            float instrY = (fbH - instrH) * 0.5f;
+
+            m_renderer.drawUIQuad(instrX, instrY, instrW, instrH, glm::vec4(0.05f, 0.05f, 0.1f, 0.98f));
+            
+            // Instructions border
+            glm::vec4 instrBorder(0.4f, 0.6f, 0.9f, 1.0f);
+            m_renderer.drawUIQuad(instrX - borderThickness, instrY - borderThickness, instrW + 2*borderThickness, borderThickness, instrBorder);
+            m_renderer.drawUIQuad(instrX - borderThickness, instrY + instrH, instrW + 2*borderThickness, borderThickness, instrBorder);
+            m_renderer.drawUIQuad(instrX - borderThickness, instrY, borderThickness, instrH, instrBorder);
+            m_renderer.drawUIQuad(instrX + instrW, instrY, borderThickness, instrH, instrBorder);
+
+            // Instructions title
+            std::string instrTitle = "HOW TO PLAY";
+            float instrTitleW = instrTitle.size() * 14.0f * 1.5f;
+            m_renderer.drawUIText(instrX + (instrW - instrTitleW) * 0.5f, instrY + instrH - 50.0f, instrTitle, 1.5f, glm::vec3(0.4f, 0.8f, 1.0f));
+
+            // Instructions text
+            float textY = instrY + instrH - 100.0f;
+            float textX = instrX + 20.0f;
+            float lineGap = 28.0f;
+
+            std::vector<std::string> instructions = {
+                "A/D or ARROW KEYS: Move paddle",
+                "SPACE: Launch ball",
+                "ESC: Pause/Resume game",
+                "1/2: Change camera view",
+                "Destroy all bricks to win!",
+                "Click here to go back"
+            };
+
+            for (const auto& line : instructions) {
+                m_renderer.drawUIText(textX, textY, line, 0.65f, glm::vec3(0.8f, 0.9f, 1.0f));
+                textY -= lineGap;
+            }
+        }
+
+        m_renderer.endUI();
+        m_window.swapBuffers();
+        return;
+    }
 
     if (m_state.currentBg != -1) {
         m_renderer.drawBackground(m_assets.backgroundTexs[m_state.currentBg].id);
@@ -599,8 +762,8 @@ void Game::render() {
             m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
             m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
             
-            std::string leftLabel = "RESTART";
-            std::string rightLabel = "SAIR";
+            std::string leftLabel = "RETRY";
+            std::string rightLabel = "MENU";
             
             float labelW = 14.0f;
             float labelSpacing = 4.0f;
