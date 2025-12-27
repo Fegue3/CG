@@ -5,7 +5,7 @@ namespace engine {
 
 class Window;
 
-enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3 };
+enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3, K4, K5, K6, K7 };
 enum class MouseButton { Left };
 
 class Input {
@@ -22,8 +22,8 @@ public:
     std::pair<float,float> mousePosFbPx() const;
 
 private:
-    bool m_keyDown[9]{};
-    bool m_keyPrev[9]{};
+    bool m_keyDown[13]{};
+    bool m_keyPrev[13]{};
 
     bool m_mouseDown[1]{};
     bool m_mousePrev[1]{};
