@@ -32,9 +32,12 @@ static void saveEndlessBestScore(int best) {
 }
 
 static void commitEndlessStreak(GameState& state) {
-    if (state.endlessStreakPoints <= 0) return;
-    state.score += state.endlessStreakPoints;
+    if (state.endlessStreakPoints == 0) return;
+    // Bank can be negative (penalties). Clamp score at 0.
+    state.score = std::max(0, state.score + state.endlessStreakPoints);
     state.endlessStreakPoints = 0;
+    state.endlessStreakPosPoints = 0;
+    state.endlessStreakNegPoints = 0;
     state.endlessStreakIdleTimer = 0.0f;
     state.endlessStreakBanking = false;
     state.endlessStreakBankTimer = 0.0f;
@@ -211,7 +214,8 @@ void Game::update(const engine::Input& input) {
 
     // Score popup timers (penalties, etc.)
     if (!m_state.scorePopups.empty()) {
-        const float popupDur = 0.95f;
+        // Keep longer so penalty popups never feel "instant vanish".
+        const float popupDur = 2.10f;
         for (size_t i = 0; i < m_state.scorePopups.size(); ) {
             m_state.scorePopups[i].t += dt;
             if (m_state.scorePopups[i].t >= popupDur) {
@@ -325,7 +329,7 @@ void Game::update(const engine::Input& input) {
         const float idleToBank = 2.5f;   // ~2-3 seconds
         const float bankAnim = 0.55f;    // short float-up
 
-        if (m_state.endlessStreakPoints > 0) {
+        if (m_state.endlessStreakPoints != 0) {
             if (!m_state.endlessStreakBanking) {
                 m_state.endlessStreakIdleTimer += dt;
                 if (m_state.endlessStreakIdleTimer >= idleToBank) {
@@ -416,24 +420,18 @@ void Game::update(const engine::Input& input) {
         m_state.lives--;
         // Losing a heart = -points (but Fireball one-shot respawn does NOT reach this path).
         if (m_cfg.lifeLossPenalty > 0) {
-            int pts = m_cfg.lifeLossPenalty;
             if (m_state.gameType == GameType::ENDLESS) {
-                // Same rule as bad powerups: hit real score first (visible), then streak bank.
-                int takeScore = std::min(m_state.score, pts);
-                m_state.score -= takeScore;
-                pts -= takeScore;
-                if (pts > 0) {
-                    int takeStreak = std::min(m_state.endlessStreakPoints, pts);
-                    m_state.endlessStreakPoints -= takeStreak;
-                    pts -= takeStreak;
-                }
+                // Same "bank" logic as the white streak popup:
+                // deduct into the bank now, commit later.
+                m_state.endlessStreakPoints -= m_cfg.lifeLossPenalty;
+                m_state.endlessStreakNegPoints += m_cfg.lifeLossPenalty;
                 m_state.endlessStreakIdleTimer = 0.0f;
                 m_state.endlessStreakBanking = false;
                 m_state.endlessStreakBankTimer = 0.0f;
             } else {
-                m_state.score = std::max(0, m_state.score - pts);
+                m_state.score = std::max(0, m_state.score - m_cfg.lifeLossPenalty);
+                m_state.scorePopups.push_back({ -m_cfg.lifeLossPenalty, 0.0f });
             }
-            m_state.scorePopups.push_back({ -m_cfg.lifeLossPenalty, 0.0f });
         }
         if (m_state.lives > 0) {
             Ball b;
@@ -1040,12 +1038,11 @@ void Game::render() {
             m_renderer.drawUIText(bestX, bestY, bestStr, bestScale, glm::vec4(1.0f, 1.0f, 1.0f, 0.75f));
             m_renderer.drawUIText(scoreX, scoreY, scoreStr, scoreScale, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
 
-            // Streak popup: "+XXX" below, close-right of the score line.
-            if (m_state.endlessStreakPoints > 0) {
-                std::string addStr = "+" + std::to_string(m_state.endlessStreakPoints);
-                float addScale = 1.45f;
-
-                float addTotalW = m_renderer.measureUITextWidth(addStr, addScale);
+            // Split bank display:
+            // - gains: white "+XXX" on the RIGHT (same as original)
+            // - penalties: red "-XXX" on the LEFT (same animation, mirrored)
+            {
+                const float addScale = 1.45f;
                 const float bankAnim = 0.55f;
                 float t = m_state.endlessStreakBanking
                     ? std::min(1.0f, std::max(0.0f, m_state.endlessStreakBankTimer / bankAnim))
@@ -1053,17 +1050,27 @@ void Game::render() {
                 float ease = t * t * (3.0f - 2.0f * t);
                 float yOffset = ease * 22.0f;
                 float alpha = 1.0f - 0.65f * ease;
+                float baseY = scoreY - scoreH * 0.65f + yOffset;
 
-                float addX = scoreX + scoreTotalW - addTotalW * 0.25f; // close-right
-                float addY = scoreY - scoreH * 0.65f + yOffset;
-                m_renderer.drawUIText(addX, addY, addStr, addScale, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
+                if (m_state.endlessStreakPosPoints > 0) {
+                    std::string s = "+" + std::to_string(m_state.endlessStreakPosPoints);
+                    float w = m_renderer.measureUITextWidth(s, addScale);
+                    float x = scoreX + scoreTotalW - w * 0.25f; // close-right
+                    m_renderer.drawUIText(x, baseY, s, addScale, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
+                }
+                if (m_state.endlessStreakNegPoints > 0) {
+                    std::string s = "-" + std::to_string(m_state.endlessStreakNegPoints);
+                    float w = m_renderer.measureUITextWidth(s, addScale);
+                    float x = scoreX - w * 0.75f; // mirrored to left
+                    m_renderer.drawUIText(x, baseY, s, addScale, glm::vec4(1.0f, 0.15f, 0.15f, alpha));
+                }
             }
 
             // Score popups:
             // - negatives: red, to the LEFT of the score
             // - positives: green, under/near the score (used e.g. by Fireball explosion)
             if (!m_state.scorePopups.empty()) {
-                const float popupDur = 0.95f;
+                const float popupDur = 2.10f;
                 float scale = 1.35f;
                 float negMaxW = 0.0f;
                 float posMaxW = 0.0f;
@@ -1074,27 +1081,34 @@ void Game::render() {
                     else            posMaxW = std::max(posMaxW, w);
                 }
 
-                float negX = scoreX - 18.0f - negMaxW;
+                // Mirror the white popup's placement:
+                // white: addX = scoreX + scoreTotalW - w*0.25
+                // red:   negX = scoreX - w*0.75
+                float negX = scoreX - negMaxW * 0.75f;
                 float posX = scoreX + (scoreTotalW - posMaxW) * 0.5f;
 
-                float yBase = scoreY - scoreH * 1.25f;
+                // Match the white streak popup height baseline exactly.
+                float yBase = scoreY - scoreH * 0.65f;
                 int negIdx = 0;
                 int posIdx = 0;
 
                 for (const auto& sp : m_state.scorePopups) {
-                    float u = std::min(1.0f, std::max(0.0f, sp.t / popupDur));
-                    float ease = u * u * (3.0f - 2.0f * u);
                     std::string s = (sp.pts >= 0) ? ("+" + std::to_string(sp.pts)) : std::to_string(sp.pts);
                     if (sp.pts < 0) {
                         // User request: same float/fade feel as the white streak popup.
+                        const float bankAnim = 0.55f;
+                        float t = std::min(1.0f, std::max(0.0f, sp.t / bankAnim));
+                        float ease = t * t * (3.0f - 2.0f * t);
                         float yOffset = ease * 22.0f;
                         float a = 1.0f - 0.65f * ease;
                         float y = yBase + yOffset + (float)negIdx * 20.0f;
                         m_renderer.drawUIText(negX, y, s, scale, glm::vec4(1.0f, 0.15f, 0.15f, a));
                         negIdx++;
                     } else if (sp.pts > 0) {
+                        float u = std::min(1.0f, std::max(0.0f, sp.t / popupDur));
+                        float ease = u * u * (3.0f - 2.0f * u);
                         float a = 1.0f - 0.75f * ease; // green can stay "snappier"
-                        float y = yBase + ease * 26.0f + (float)posIdx * 20.0f;
+                        float y = (scoreY - scoreH * 1.25f) + ease * 26.0f + (float)posIdx * 20.0f;
                         m_renderer.drawUIText(posX, y, s, scale, glm::vec4(0.35f, 1.0f, 0.35f, a));
                         posIdx++;
                     }
