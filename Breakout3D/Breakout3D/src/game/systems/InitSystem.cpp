@@ -96,6 +96,9 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.reverseTimer = 0.0f;
     state.tinyTimer = 0.0f;
     state.fireballExplosions.clear();
+    state.fireballShards.clear();
+    state.fireballShakeTimer = 0.0f;
+    state.fireballShakeAnchorPos = glm::vec3(0.0f);
     state.scorePopups.clear();
     state.pendingRespawnAfterFireball = false;
     state.brickHitCooldown = 0.0f;

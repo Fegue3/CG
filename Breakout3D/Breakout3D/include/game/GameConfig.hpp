@@ -21,7 +21,7 @@ struct GameConfig {
 
     // Powerups
     float powerUpDropSpeed = 4.5f;
-    float powerUpChance = 0.40f; // 40% chance (increased from 25%)
+    float powerUpChance = 0.35f; // tuned: a bit less spammy
     float powerUpDuration = 7.0f;
     float powerUpVisualScale = 1.15f;
     float slowSpeedFactor = 0.5f;
@@ -29,18 +29,26 @@ struct GameConfig {
 
     // New powerups/curses tuning
     float fireballDuration = 7.0f;
-    float fireballExplosionRadius = 4.8f; // in world units (XZ)
+    float fireballExplosionRadius = 4.2f; // tuned: big but not screen-clearing
     float fireballExplosionFxDuration = 0.45f; // UI ring duration
+    float fireballFlashMaxAlpha = 0.20f; // full-screen flash on impact
+    float fireballShakeDuration = 0.32f;
+    float fireballShakeStrength = 0.28f;
+    int fireballShardCount = 18;
+    float fireballShardLife = 0.55f;
+    float fireballShardSpeed = 8.0f;
+    float fireballShardUp = 4.5f;
+    float fireballShardDrag = 2.2f;
 
-    float shieldDuration = 7.0f;
-    float shieldOffsetZ = 2.4f; // barrier behind the paddle (towards arenaMaxZ)
+    float shieldDuration = 6.5f;
+    float shieldOffsetZ = 2.2f; // barrier behind the paddle (towards arenaMaxZ)
 
-    float reverseDuration = 5.0f;
+    float reverseDuration = 4.25f; // tuned: less annoying
 
-    float tinyDuration = 7.0f;
+    float tinyDuration = 6.0f;
     float tinyScaleFactor = 0.60f;
 
-    int lifeLossPenalty = 250; // user request: losing a heart = -points
+    int lifeLossPenalty = 200; // tuned
 };
 
 } // namespace game

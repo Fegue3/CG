@@ -212,6 +212,31 @@ void Game::update(const engine::Input& input) {
         }
     }
 
+    // Fireball shake timer
+    if (m_state.fireballShakeTimer > 0.0f) {
+        m_state.fireballShakeTimer = std::max(0.0f, m_state.fireballShakeTimer - dt);
+    }
+
+    // Fireball shard simulation (cheap debris)
+    if (!m_state.fireballShards.empty()) {
+        const float g = 12.0f;
+        for (size_t i = 0; i < m_state.fireballShards.size(); ) {
+            auto& s = m_state.fireballShards[i];
+            s.t += dt;
+            // simple drag on XZ
+            float drag = m_cfg.fireballShardDrag;
+            s.vel.x *= std::exp(-drag * dt);
+            s.vel.z *= std::exp(-drag * dt);
+            s.vel.y -= g * dt;
+            s.pos += s.vel * dt;
+            if (s.t >= m_cfg.fireballShardLife || s.pos.y < -0.25f) {
+                m_state.fireballShards.erase(m_state.fireballShards.begin() + i);
+            } else {
+                ++i;
+            }
+        }
+    }
+
     // Score popup timers (penalties, etc.)
     if (!m_state.scorePopups.empty()) {
         // Keep longer so penalty popups never feel "instant vanish".
@@ -666,6 +691,20 @@ void Game::render() {
         rollRad = cam.rollRad;
     }
 
+    // Fireball shake (subtle camera jitter on impact)
+    if (m_state.fireballShakeTimer > 0.0f && m_cfg.fireballShakeDuration > 1e-4f) {
+        float u = m_state.fireballShakeTimer / m_cfg.fireballShakeDuration; // 1..0
+        u = std::max(0.0f, std::min(1.0f, u));
+        // ease-out
+        float e = u * u;
+        float amp = m_cfg.fireballShakeStrength * e;
+        float t = m_time.now();
+        float ox = std::sin(t * 44.0f) * amp;
+        float oy = std::sin(t * 57.0f + 1.7f) * amp * 0.65f;
+        camPos += glm::vec3(ox, oy, 0.0f);
+        camTarget += glm::vec3(ox * 0.55f, oy * 0.55f, 0.0f);
+    }
+
     glm::mat4 V = glm::lookAt(camPos, camTarget, glm::vec3(0,1,0));
     if (rollRad != 0.0f) {
         V = glm::rotate(glm::mat4(1.0f), rollRad, glm::vec3(0, 0, 1)) * V;
@@ -750,6 +789,17 @@ void Game::render() {
         const engine::Mesh* m = pickBrickMesh(b.maxHp, b.hp);
 
         m_renderer.drawMesh(*m, b.pos, b.size, tint);
+    }
+
+    // Fireball debris shards (break feel)
+    if (!m_state.fireballShards.empty()) {
+        for (const auto& s : m_state.fireballShards) {
+            float u = (m_cfg.fireballShardLife > 1e-4f) ? std::min(1.0f, std::max(0.0f, s.t / m_cfg.fireballShardLife)) : 1.0f;
+            float k = 1.0f - u;
+            glm::vec3 col = glm::mix(glm::vec3(1.0f, 0.55f, 0.15f), glm::vec3(0.15f, 0.08f, 0.03f), u);
+            glm::vec3 sz(0.30f * k, 0.18f * k, 0.22f * k);
+            m_renderer.drawMesh(m_assets.brick01, s.pos, sz, col);
+        }
     }
 
     // Paddle
@@ -926,10 +976,13 @@ void Game::render() {
         };
 
         float dur = std::max(0.001f, m_cfg.fireballExplosionFxDuration);
+        float flashA = 0.0f;
         for (const auto& fx : m_state.fireballExplosions) {
             float u = fx.t / dur;
             if (u < 0.0f) u = 0.0f;
             if (u > 1.0f) u = 1.0f;
+
+            flashA = std::max(flashA, (1.0f - u) * m_cfg.fireballFlashMaxAlpha);
 
             // Project explosion center to UI pixels
             glm::vec4 clip = P * V * glm::vec4(fx.pos, 1.0f);
@@ -948,6 +1001,11 @@ void Game::render() {
             float a = (1.0f - u) * 0.85f;
             glm::vec4 col(1.0f, 0.55f, 0.10f, a);
             if (a > 0.01f) drawRing(cPx, radiusPx, thickPx, col);
+        }
+
+        // Flash overlay (break feel)
+        if (flashA > 0.01f) {
+            m_renderer.drawUIQuad(0.0f, 0.0f, (float)fbW, (float)fbH, glm::vec4(1.0f, 0.55f, 0.10f, flashA));
         }
     }
 

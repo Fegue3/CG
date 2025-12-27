@@ -66,6 +66,17 @@ struct GameState {
     };
     std::vector<FireballExplosionFx> fireballExplosions;
 
+    // Fireball impact "break" feel
+    float fireballShakeTimer = 0.0f;
+    glm::vec3 fireballShakeAnchorPos = glm::vec3(0.0f);
+
+    struct FireballShard {
+        glm::vec3 pos = glm::vec3(0.0f);
+        glm::vec3 vel = glm::vec3(0.0f);
+        float t = 0.0f;
+    };
+    std::vector<FireballShard> fireballShards;
+
     // Score popups (used for negative penalties and positive instant awards like Fireball)
     struct ScorePopup {
         int pts = 0;      // can be negative

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 
 static float clampf(float v, float a, float b) { 
     return std::max(a, std::min(v, b)); 
@@ -195,6 +196,28 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                     // Normal mode keeps score HUD hidden, so skip positive popups there.
                     if (state.gameType == GameType::ENDLESS) {
                         state.scorePopups.push_back({ explosionPts, 0.0f });
+                    }
+                }
+
+                // "Break" feel: camera shake + debris shards
+                state.fireballShakeTimer = cfg.fireballShakeDuration;
+                state.fireballShakeAnchorPos = br.pos;
+                {
+                    auto frand = []() -> float { return (float)rand() / (float)RAND_MAX; };
+                    for (int i = 0; i < cfg.fireballShardCount; ++i) {
+                        float a = frand() * glm::two_pi<float>();
+                        float r = 0.15f + frand() * 0.55f;
+                        glm::vec3 p = br.pos + glm::vec3(std::cos(a) * r, 0.12f + frand() * 0.18f, std::sin(a) * r);
+
+                        float dirA = frand() * glm::two_pi<float>();
+                        float sp = cfg.fireballShardSpeed * (0.65f + frand() * 0.55f);
+                        glm::vec3 v(std::cos(dirA) * sp, cfg.fireballShardUp * (0.65f + frand() * 0.55f), std::sin(dirA) * sp);
+
+                        GameState::FireballShard s;
+                        s.pos = p;
+                        s.vel = v;
+                        s.t = 0.0f;
+                        state.fireballShards.push_back(s);
                     }
                 }
 

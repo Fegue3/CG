@@ -126,17 +126,17 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
             };
 
             if (p.type == PowerUpType::SLOW) {
-                applyPenalty(300);
+                applyPenalty(220);
             } else if (p.type == PowerUpType::EXTRA_LIFE) {
-                addGood(500);
-            } else if (p.type == PowerUpType::EXPAND) {
-                addGood(250);
-            } else if (p.type == PowerUpType::EXTRA_BALL) {
-                addGood(350);
-            } else if (p.type == PowerUpType::FIREBALL) {
                 addGood(400);
-            } else if (p.type == PowerUpType::SHIELD) {
+            } else if (p.type == PowerUpType::EXPAND) {
+                addGood(220);
+            } else if (p.type == PowerUpType::EXTRA_BALL) {
                 addGood(300);
+            } else if (p.type == PowerUpType::FIREBALL) {
+                addGood(250);
+            } else if (p.type == PowerUpType::SHIELD) {
+                addGood(250);
             } else if (p.type == PowerUpType::REVERSE) {
                 applyPenalty(250);
             } else if (p.type == PowerUpType::TINY) {
