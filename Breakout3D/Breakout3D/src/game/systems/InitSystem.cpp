@@ -68,6 +68,7 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.endlessStreakBankTimer = 0.0f;
     state.endlessDangerActive = false;
     state.endlessDangerTimer = 0.0f;
+    state.endlessElapsedTime = 0.0f;
     
     // For endless mode, wave is already set before calling init()
     // For normal mode, reset wave to 1

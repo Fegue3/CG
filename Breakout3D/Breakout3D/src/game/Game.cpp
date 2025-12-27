@@ -121,8 +121,12 @@ void Game::update(const engine::Input& input) {
         m_state.brickHitCooldown = std::max(0.0f, m_state.brickHitCooldown - dt);
     if (m_state.endlessSpawnCooldown > 0.0f)
         m_state.endlessSpawnCooldown = std::max(0.0f, m_state.endlessSpawnCooldown - dt);
-    if (m_state.gameType == GameType::ENDLESS)
+    if (m_state.gameType == GameType::ENDLESS) {
         m_state.endlessAutoTimer += dt;
+        if (m_state.mode == GameMode::PLAYING) {
+            m_state.endlessElapsedTime += dt;
+        }
+    }
     if (m_state.expandTimer > 0.0f) m_state.expandTimer = std::max(0.0f, m_state.expandTimer - dt);
     if (m_state.slowTimer > 0.0f) m_state.slowTimer = std::max(0.0f, m_state.slowTimer - dt);
 
@@ -219,6 +223,30 @@ void Game::update(const engine::Input& input) {
     if (m_state.gameType == GameType::ENDLESS && m_state.pendingSpawnBricks > 0) {
         InitSystem::spawnIncrementalBricks(m_state, m_cfg, m_state.pendingSpawnBricks, m_state.wave);
         m_state.pendingSpawnBricks = 0;
+    }
+
+    // Endless mode: time-based pressure (rows spawn over time, but ramps up gently).
+    if (m_state.gameType == GameType::ENDLESS && m_state.mode == GameMode::PLAYING && m_state.endlessSpawnCooldown <= 0.0f) {
+        const float t = m_state.endlessElapsedTime;
+
+        // Grace period: let the player stabilize first.
+        const float grace = 60.0f;
+        if (t < grace) {
+            m_state.endlessAutoTimer = 0.0f;
+        } else {
+            // After grace, interval slowly decreases over time:
+            // ~26s (just after grace) down to ~12s by ~10 minutes, clamped.
+            float u = std::min(1.0f, (t - grace) / 540.0f); // 0..1 over 9 minutes
+            float interval = 26.0f - (14.0f * u);
+            interval = std::max(12.0f, interval);
+
+            // Avoid stacking multiple rows at once.
+            if (m_state.pendingSpawnBricks < 12 && m_state.endlessAutoTimer >= interval) {
+                m_state.pendingSpawnBricks += 12;
+                m_state.endlessSpawnCooldown = 0.50f;
+                m_state.endlessAutoTimer = 0.0f;
+            }
+        }
     }
 
     // Endless mode: check for lose condition (brick reached paddle)

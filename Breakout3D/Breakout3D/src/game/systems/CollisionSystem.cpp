@@ -122,9 +122,17 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 // Count destroyed bricks for endless mode spawning
                 if (state.gameType == GameType::ENDLESS) {
                     state.bricksDestroyedThisWave++;
-                    if (state.bricksDestroyedThisWave >= 15) {
+                    // Softer ramp: early game requires MORE bricks (easier),
+                    // then gradually returns to the classic 15 as time goes on.
+                    const float t = state.endlessElapsedTime;
+                    float u = (t <= 120.0f) ? 0.0f : std::min(1.0f, (t - 120.0f) / 480.0f); // 0..1 from 2min to 10min
+                    int required = (int)std::round(22.0f - (7.0f * u)); // 22 -> 15
+                    if (required < 15) required = 15;
+                    if (required > 22) required = 22;
+
+                    if (state.bricksDestroyedThisWave >= required) {
                         state.pendingSpawnBricks += 12;
-                        state.bricksDestroyedThisWave -= 15;
+                        state.bricksDestroyedThisWave -= required;
                     }
                 }
             }

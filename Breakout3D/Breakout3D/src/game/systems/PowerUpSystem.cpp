@@ -16,10 +16,11 @@ void PowerUpSystem::spawnPowerUp(GameState& state, const glm::vec3& pos, float c
     p.pos.y = 0.4f; // Lift slightly off the ground initially
 
     int r2 = rand() % 100;
-    if (r2 < 15)       p.type = PowerUpType::EXTRA_LIFE; // 15%
-    else if (r2 < 43)  p.type = PowerUpType::EXPAND;     // 28%
-    else if (r2 < 71)  p.type = PowerUpType::SLOW;       // 28%
-    else               p.type = PowerUpType::EXTRA_BALL; // 29%
+    // Make EXTRA_BALL the most common drop (player request).
+    if (r2 < 45)       p.type = PowerUpType::EXTRA_BALL; // 45%
+    else if (r2 < 65)  p.type = PowerUpType::EXPAND;     // 20%
+    else if (r2 < 82)  p.type = PowerUpType::SLOW;       // 17%
+    else               p.type = PowerUpType::EXTRA_LIFE; // 18%
     
     state.powerups.push_back(p);
 }

@@ -59,6 +59,7 @@ struct GameState {
     float spawnPingTimer = 0.0f;
     float endlessSpawnCooldown = 0.0f; // seconds between auto spawns
     float endlessAutoTimer = 0.0f;      // periodic auto-spawn timer
+    float endlessElapsedTime = 0.0f;    // total time spent in endless mode (playing)
 
     // UI click edge
     bool mouseWasDown = false;
