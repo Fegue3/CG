@@ -63,6 +63,8 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.score = 0;
     state.endlessBestScore = loadEndlessBestScore();
     state.endlessStreakPoints = 0;
+    state.endlessStreakPosPoints = 0;
+    state.endlessStreakNegPoints = 0;
     state.endlessStreakIdleTimer = 0.0f;
     state.endlessStreakBanking = false;
     state.endlessStreakBankTimer = 0.0f;
