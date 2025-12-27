@@ -17,19 +17,19 @@ Endless Mode is an infinite survival variant:
   - If you stop scoring for a short time, the bank is committed into the real score.
 - A persistent best score is stored on disk across runs.
 
-Key source files:
+Key source files (repo paths):
 
-- `include/game/GameState.hpp` (Endless state variables)
-- `src/game/Game.cpp` (timers, streak banking, time-based spawns, danger/lose condition, UI)
-- `src/game/systems/CollisionSystem.cpp` (brick destruction scoring, brick-destroy-based spawn trigger)
-- `src/game/systems/InitSystem.cpp` (initialization, initial brick generation, best score load)
-- `src/game/systems/PowerUpSystem.cpp` (power-up drop weights and effects)
+- `Breakout3D/Breakout3D/include/game/GameState.hpp` (Endless state variables)
+- `Breakout3D/Breakout3D/src/game/Game.cpp` (timers, streak banking, time-based spawns, danger/lose condition, UI)
+- `Breakout3D/Breakout3D/src/game/systems/CollisionSystem.cpp` (brick destruction scoring, brick-destroy-based spawn trigger)
+- `Breakout3D/Breakout3D/src/game/systems/InitSystem.cpp` (initialization, initial brick generation, best score load)
+- `Breakout3D/Breakout3D/src/game/systems/PowerUpSystem.cpp` (power-up drop weights and effects)
 
 ---
 
 ## GameState fields (Endless-relevant)
 
-All Endless state is stored in `game::GameState` (`include/game/GameState.hpp`).
+All Endless state is stored in `game::GameState` (`Breakout3D/Breakout3D/include/game/GameState.hpp`).
 
 ### Core Endless progression/spawning
 
@@ -120,7 +120,7 @@ Endless uses **two** concurrent mechanisms that both end up increasing `pendingS
 
 ### 1) Brick-destroy-based spawn (progress pressure)
 
-Implementation: `src/game/systems/CollisionSystem.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/systems/CollisionSystem.cpp`
 
 When a brick’s HP reaches 0 (i.e. it is destroyed), Endless increments:
 
@@ -144,7 +144,7 @@ This makes the early game easier (you need to clear more bricks before the next 
 
 ### 2) Time-based spawn (survival pressure)
 
-Implementation: `src/game/Game.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/Game.cpp`
 
 In `Game::update()`:
 
@@ -178,7 +178,7 @@ Notes:
 
 ## How rows are inserted into the world
 
-Implementation: `InitSystem::spawnIncrementalBricks(state, cfg, count, waveNumber)` in `src/game/systems/InitSystem.cpp`.
+Implementation: `InitSystem::spawnIncrementalBricks(state, cfg, count, waveNumber)` in `Breakout3D/Breakout3D/src/game/systems/InitSystem.cpp`.
 
 When `pendingSpawnBricks` is non-zero, `Game::update()` calls `spawnIncrementalBricks(...)` and then clears `pendingSpawnBricks` back to 0.
 
@@ -211,7 +211,7 @@ Newly spawned bricks get HP based on their global row index:
 
 ## Lose condition (Endless only)
 
-Implementation: `src/game/Game.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/Game.cpp`
 
 Endless checks for defeat by comparing the front-most alive brick against a limit near the paddle:
 
@@ -227,7 +227,7 @@ Endless checks for defeat by comparing the front-most alive brick against a limi
 
 ## Danger warning (UI + telemetry)
 
-Implementation: `src/game/Game.cpp` (logic) and UI rendering inside the UI pass.
+Implementation: `Breakout3D/Breakout3D/src/game/Game.cpp` (logic) and UI rendering inside the UI pass.
 
 The warning activates before you actually lose. It’s based on the maximum alive brick Z:
 
@@ -253,7 +253,7 @@ Endless scoring is built around a **streak bank** so you get satisfying “chain
 
 ### Brick points
 
-Implementation: `src/game/systems/CollisionSystem.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/systems/CollisionSystem.cpp`
 
 When a brick is destroyed, points are computed from its max HP:
 
@@ -272,7 +272,7 @@ Then an Endless wave bonus is added:
 
 ### Streak bank vs real score
 
-Implementation: `src/game/Game.cpp`, `src/game/systems/CollisionSystem.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/Game.cpp`, `Breakout3D/Breakout3D/src/game/systems/CollisionSystem.cpp`
 
 In Endless:
 
@@ -296,7 +296,7 @@ Commit on death:
 
 ### Powerup pickup scoring (Endless only)
 
-Implementation: `src/game/systems/PowerUpSystem.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/systems/PowerUpSystem.cpp`
 
 On pickup, Endless adjusts the streak/score:
 
@@ -315,8 +315,8 @@ Endless persists a best score across runs.
 
 Two implementations exist (same path) in:
 
-- `src/game/Game.cpp`
-- `src/game/systems/InitSystem.cpp`
+- `Breakout3D/Breakout3D/src/game/Game.cpp`
+- `Breakout3D/Breakout3D/src/game/systems/InitSystem.cpp`
 
 Path logic:
 
@@ -339,7 +339,7 @@ Best score updates are triggered when:
 
 ## Power-ups (drop rates + effects)
 
-Implementation: `src/game/systems/PowerUpSystem.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/systems/PowerUpSystem.cpp`
 
 ### Drop chance
 
@@ -375,7 +375,7 @@ On `EXTRA_BALL`, three new balls are spawned:
 
 ## Debug / developer hooks
 
-Implementation: `src/game/Game.cpp`
+Implementation: `Breakout3D/Breakout3D/src/game/Game.cpp`
 
 - Pressing `K3` in Endless triggers a manual row spawn via `spawnIncrementalBricks(...)` and resets relevant timers.
 
@@ -385,7 +385,7 @@ Implementation: `src/game/Game.cpp`
 
 ### Time-based pressure
 
-Edit in `src/game/Game.cpp` (time-based pressure block):
+Edit in `Breakout3D/Breakout3D/src/game/Game.cpp` (time-based pressure block):
 
 - Grace period: `grace = 60.0f`
 - Interval range: `26.0f` down to `12.0f`
@@ -393,7 +393,7 @@ Edit in `src/game/Game.cpp` (time-based pressure block):
 
 ### Brick-destroy pressure
 
-Edit in `src/game/systems/CollisionSystem.cpp`:
+Edit in `Breakout3D/Breakout3D/src/game/systems/CollisionSystem.cpp`:
 
 - Early requirement: 22
 - Late requirement: 15
@@ -401,7 +401,7 @@ Edit in `src/game/systems/CollisionSystem.cpp`:
 
 ### Brick HP scaling
 
-Edit in `src/game/systems/InitSystem.cpp`:
+Edit in `Breakout3D/Breakout3D/src/game/systems/InitSystem.cpp`:
 
 - `difficultyBonus = rowGlobal / 20`
 - `hp = min(6, baseHp + difficultyBonus)`

@@ -1,133 +1,57 @@
-# Breakout3D 🎮🧱
+# Breakout3D — Short Explanation
 
-Projeto académico de um **jogo Breakout em 3D**, desenvolvido em **C++ com OpenGL**, seguindo uma arquitetura modular e escalável que separa claramente:
+This is a short, up-to-date explanation of the Breakout3D project in this repository.
 
-- **Engine / Infraestrutura gráfica**
-- **Lógica de Jogo (Breakout)**
-
----
-
-## 🎯 Estado atual do projeto
-
-O projeto encontra-se funcional e inclui:
-
-- Janela OpenGL com suporte a fullscreen
-- Câmara 3D com perspetiva
-- Paddle controlada pelo utilizador
-- Bola com movimento e física básica
-- Colisão bola ↔ paredes
-- Colisão bola ↔ paddle (ângulo dependente do impacto)
-- Grelha de bricks destrutíveis
-- Colisão bola ↔ bricks
-
-O jogo já se comporta como um **Breakout 3D jogável**.
+> Source code lives under `Breakout3D/Breakout3D/`.
 
 ---
 
-## 📁 Estrutura do Projeto
+## What the project is
 
-```
-Breakout3D/
-│
-├── Makefile
-├── README.md
-│
-├── external/
-│   ├── glfw/
-│   ├── glad/
-│   ├── glm/
-│   └── stb_image.h
-│
-├── assets/
-│   ├── shaders/
-│   ├── models/
-│   ├── textures/
-│   └── levels/
-│
-├── include/
-│   ├── engine/
-│   └── game/
-│       └── entities/
-│
-├── src/
-│   ├── engine/
-│   └── game/
-│
-└── breakout3d
-```
+Breakout3D is an academic 3D version of classic Breakout, implemented in **C++17** with **OpenGL**.
+
+- Gameplay is mostly on the **XZ plane** (Y is used for visuals/camera/UI placement).
+- The project uses a modular split between an engine layer and a game layer.
 
 ---
 
-## 🧱 Arquitetura
+## Current features (high level)
 
-### engine/
-Camada genérica e reutilizável:
-- Janela (GLFW)
-- OpenGL
-- Shaders
-- Meshes
-- Renderer
-- Câmara
-
-Não contém qualquer lógica específica do jogo.
-
-### game/
-Camada específica do Breakout:
-- Estado do jogo (bola, paddle, bricks)
-- Configuração da arena
-- Lógica de colisões
-- Regras do jogo
-
-Não comunica diretamente com OpenGL.
-
-### main.cpp
-Responsável por:
-- Inicializar a engine
-- Criar o jogo
-- Executar o loop principal
+- Main menu (Normal / Endless / Instructions / Exit)
+- Two camera modes (keys 1/2)
+- Pause/resume (Esc)
+- 3D bricks with HP (Endless can scale up to 6 HP)
+- Power-ups (Extra Ball, Expand, Slow, Extra Life)
+- Endless Mode with time-based + brick-destroy-based row spawning and best-score persistence
 
 ---
 
-## 🕹️ Controlos
+## Controls (current)
 
-| Tecla | Ação |
-|------|------|
-| A / ← | Mover paddle para a esquerda |
-| D / → | Mover paddle para a direita |
-| SPACE | Lançar a bola |
-| F11 | Fullscreen |
-| ESC | Sair |
+- **A / Left Arrow**: move paddle left
+- **D / Right Arrow**: move paddle right
+- **Space**: launch the ball (when attached)
+- **Esc**: pause/resume
+- **1 / 2**: change camera mode
+- **Mouse**: click menu + click background selector (top right)
+
+Note: fullscreen toggle is **not** bound to a key in the current code.
 
 ---
 
-## ⚙️ Compilação e Execução (Linux / WSL)
+## Build & run
+
+From repository root:
 
 ```bash
-make
+cd Breakout3D/Breakout3D
+make -j
 ./breakout3d
 ```
 
-Limpar:
+Clean:
+
 ```bash
 make clean
 ```
 
----
-
-## 🚀 Próximos passos
-
-- Sistema de pontuação
-- Vidas
-- Níveis a partir de ficheiros
-- Power-ups
-- Efeitos visuais e som
-
----
-
-## 👨‍💻 Notas finais
-
-Este projeto foi desenvolvido com foco em:
-- Organização de código
-- Separação de responsabilidades
-- Facilidade de evolução
-- Clareza para avaliação académica
