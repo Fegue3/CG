@@ -30,6 +30,10 @@ bool GameAssets::loadAll() {
         extraBall     = engine::Mesh::loadOBJ("Extra_Ball.obj");
         slow          = engine::Mesh::loadOBJ("Slow.obj");
         extraLife     = engine::Mesh::loadOBJ("extralife.obj");
+        fireball      = engine::Mesh::loadOBJ("Fireball.obj");
+        shield        = engine::Mesh::loadOBJ("Shield.obj");
+        skull         = engine::Mesh::loadOBJ("Skull.obj");
+        minus         = engine::Mesh::loadOBJ("Minus.obj");
 
         // Se quiseres walls com o mesmo mesh do brick:
         wall = brick01;
@@ -72,6 +76,10 @@ void GameAssets::destroy() {
     extraBall.destroy();
     slow.destroy();
     extraLife.destroy();
+    fireball.destroy();
+    shield.destroy();
+    skull.destroy();
+    minus.destroy();
     for (int i = 0; i < 4; i++) backgroundTexs[i].destroy();
 }
 
