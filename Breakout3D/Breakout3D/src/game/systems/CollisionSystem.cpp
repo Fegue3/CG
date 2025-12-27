@@ -113,6 +113,7 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                     }
                     // Endless: accumulate into a streak bank (committed later by Game::update)
                     state.endlessStreakPoints += pts;
+                    state.endlessStreakPosPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
                     // If we were in the middle of "banking" animation, cancel it (fresh points came in)
                     state.endlessStreakBanking = false;
