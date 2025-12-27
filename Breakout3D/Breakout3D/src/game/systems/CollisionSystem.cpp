@@ -85,61 +85,40 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
     for (auto& br : state.bricks) {
         if (!br.alive) continue;
         if (sphereAabbXZ(ball.pos, cfg.ballRadius, br.pos, br.size)) {
-            br.hp--;
-            if (br.hp <= 0) {
-                // If this was the LAST brick (normal mode), keep a visual copy for the brief slow-down
-                // so the player sees it "break" exactly when the finisher burst starts.
-                if (state.gameType == GameType::NORMAL && state.mode == GameMode::PLAYING) {
-                    bool anyOtherAlive = false;
-                    for (const auto& other : state.bricks) {
-                        if (&other == &br) continue;
-                        if (other.alive) { anyOtherAlive = true; break; }
-                    }
-                    if (!anyOtherAlive) {
-                        state.winFinisherHoldBrickValid = true;
-                        state.winFinisherHoldBrickPos = br.pos;
-                        state.winFinisherHoldBrickSize = br.size;
-                        state.winFinisherHoldBrickMaxHp = br.maxHp;
-                        state.winFinisherHoldBrickHp = 1; // show the "about to break" look
-                    }
-                }
-                br.alive = false;
-                // Track where the last destroyed brick was (for anchoring VFX).
-                state.lastBrickDestroyedValid = true;
-                state.lastBrickDestroyedPos = br.pos;
-                PowerUpSystem::spawnPowerUp(state, br.pos, cfg.powerUpChance);
-                
-                // Points:
-                // - Bricks: higher HP (color) = more points
-                // - Endless: small wave bonus so later waves score higher
-                auto brickPoints = [&](int hp) -> int {
-                    // hp 1..6 (endless can go up to 6)
-                    switch (hp) {
-                        case 1: return 50;   // green
-                        case 2: return 120;  // yellow
-                        case 3: return 220;  // blue
-                        case 4: return 350;  // purple
-                        case 5: return 500;
-                        default: return 700; // 6+
-                    }
-                };
+            const bool fireballActive = ball.isFireball;
 
-                int baseScore = brickPoints(br.maxHp);
+            // Scoring helper
+            auto brickPoints = [&](int hp) -> int {
+                // hp 1..6 (endless can go up to 6)
+                switch (hp) {
+                    case 1: return 50;   // green
+                    case 2: return 120;  // yellow
+                    case 3: return 220;  // blue
+                    case 4: return 350;  // purple
+                    case 5: return 500;
+                    default: return 700; // 6+
+                }
+            };
+
+            auto awardBrickPoints = [&](int maxHp, bool immediateScore) -> int {
+                int baseScore = brickPoints(maxHp);
                 int waveBonus = (state.gameType == GameType::ENDLESS) ? (state.wave * 25) : 0;
                 int pts = baseScore + waveBonus;
+
                 if (state.gameType == GameType::ENDLESS) {
+                    if (immediateScore) {
+                        // Meteor/fireball: push points directly into the visible score.
+                        state.score += pts;
+                        return pts;
+                    }
                     // Endless: accumulate into a streak bank (committed later by Game::update)
                     state.endlessStreakPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
                     // If we were in the middle of "banking" animation, cancel it (fresh points came in)
                     state.endlessStreakBanking = false;
                     state.endlessStreakBankTimer = 0.0f;
-                } else {
-                    state.score += pts;
-                }
-                
-                // Count destroyed bricks for endless mode spawning
-                if (state.gameType == GameType::ENDLESS) {
+
+                    // Count destroyed bricks for endless mode spawning
                     state.bricksDestroyedThisWave++;
                     // Softer ramp: early game requires MORE bricks (easier),
                     // then gradually returns to the classic 15 as time goes on.
@@ -153,6 +132,96 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                         state.pendingSpawnBricks += 12;
                         state.bricksDestroyedThisWave -= required;
                     }
+                } else {
+                    state.score += pts;
+                }
+                return pts;
+            };
+
+            auto killBrick = [&](Brick& b, bool allowPowerupDrop) -> int {
+                if (!b.alive) return 0;
+                b.alive = false;
+
+                // Track where the last destroyed brick was (for anchoring VFX).
+                state.lastBrickDestroyedValid = true;
+                state.lastBrickDestroyedPos = b.pos;
+
+                if (allowPowerupDrop) {
+                    PowerUpSystem::spawnPowerUp(state, b.pos, cfg.powerUpChance);
+                }
+
+                return awardBrickPoints(b.maxHp, fireballActive);
+            };
+
+            // Fireball hit = instant-kill the hit brick + AoE explosion kills nearby bricks.
+            if (fireballActive) {
+                int explosionPts = 0;
+                // Kill neighbors first so "last brick" detection can be correct.
+                float r = cfg.fireballExplosionRadius;
+                float r2 = r * r;
+
+                for (auto& other : state.bricks) {
+                    if (!other.alive) continue;
+                    float dx = other.pos.x - br.pos.x;
+                    float dz = other.pos.z - br.pos.z;
+                    if ((dx * dx + dz * dz) <= r2) {
+                        // Only the directly-hit brick can spawn a drop (prevents powerup floods).
+                        bool allowDrop = (&other == &br);
+                        int got = killBrick(other, allowDrop);
+                        if (got > 0) explosionPts += got;
+                    }
+                }
+
+                // If this explosion wiped the last brick (normal mode), keep a visual copy for the finisher.
+                if (state.gameType == GameType::NORMAL && state.mode == GameMode::PLAYING) {
+                    bool anyAlive = false;
+                    for (const auto& b : state.bricks) {
+                        if (b.alive) { anyAlive = true; break; }
+                    }
+                    if (!anyAlive) {
+                        state.winFinisherHoldBrickValid = true;
+                        state.winFinisherHoldBrickPos = br.pos;
+                        state.winFinisherHoldBrickSize = br.size;
+                        state.winFinisherHoldBrickMaxHp = br.maxHp;
+                        state.winFinisherHoldBrickHp = 1;
+                    }
+                }
+
+                // Spawn a UI explosion ring at the impact point.
+                state.fireballExplosions.push_back({ br.pos, 0.0f });
+                if (explosionPts > 0) {
+                    // Show immediate +PTS popup near the score HUD
+                    state.scorePopups.push_back({ explosionPts, 0.0f });
+                }
+
+                // One-shot: delete the fireball ball (no bounce).
+                ball.alive = false;
+                ball.isFireball = false;
+                ball.vel = glm::vec3(0.0f);
+                state.pendingRespawnAfterFireball = true;
+                state.brickHitCooldown = 0.045f;
+                return true;
+            } else {
+                // Normal hit: damage 1
+                br.hp--;
+                if (br.hp <= 0) {
+                    // If this was the LAST brick (normal mode), keep a visual copy for the brief slow-down
+                    // so the player sees it "break" exactly when the finisher burst starts.
+                    if (state.gameType == GameType::NORMAL && state.mode == GameMode::PLAYING) {
+                        bool anyOtherAlive = false;
+                        for (const auto& other : state.bricks) {
+                            if (&other == &br) continue;
+                            if (other.alive) { anyOtherAlive = true; break; }
+                        }
+                        if (!anyOtherAlive) {
+                            state.winFinisherHoldBrickValid = true;
+                            state.winFinisherHoldBrickPos = br.pos;
+                            state.winFinisherHoldBrickSize = br.size;
+                            state.winFinisherHoldBrickMaxHp = br.maxHp;
+                            state.winFinisherHoldBrickHp = 1; // show the "about to break" look
+                        }
+                    }
+                    (void)killBrick(br, true);
                 }
             }
 
