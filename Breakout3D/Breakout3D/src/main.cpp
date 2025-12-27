@@ -8,7 +8,8 @@
 
 int main() {
     engine::Window window;
-    if (!window.create(1280, 720, "Breakout3D")) return -1;
+    // Slightly taller default window so the big menu title fits above the options cleanly.
+    if (!window.create(1280, 900, "Breakout3D")) return -1;
 
     engine::Time time;
     time.tick();
