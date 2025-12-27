@@ -7,6 +7,7 @@ namespace game {
 
 void PhysicsSystem::resetBallToPaddle(Ball& ball, const glm::vec3& paddlePos, const GameConfig& cfg) {
     ball.attached = true;
+    ball.alive = true;
     ball.vel = glm::vec3(0.0f);
     ball.pos = paddlePos + glm::vec3(
         0.0f, 0.0f,
@@ -26,6 +27,9 @@ void PhysicsSystem::updatePaddle(GameState& state, const GameConfig& cfg, float 
     if (state.expandTimer > 0.0f) {
         currentPaddleSize.x *= cfg.expandScaleFactor;
     }
+    if (state.tinyTimer > 0.0f) {
+        currentPaddleSize.x *= cfg.tinyScaleFactor;
+    }
     
     float paddleHalfX = currentPaddleSize.x * 0.5f;
     state.paddlePos.x = std::clamp(
@@ -40,6 +44,9 @@ void PhysicsSystem::updateBalls(GameState& state, const GameConfig& cfg, float d
     if (state.expandTimer > 0.0f) {
         currentPaddleSize.x *= cfg.expandScaleFactor;
     }
+    if (state.tinyTimer > 0.0f) {
+        currentPaddleSize.x *= cfg.tinyScaleFactor;
+    }
     
     for (size_t i = 0; i < state.balls.size(); ) {
         Ball& b = state.balls[i];
@@ -51,6 +58,19 @@ void PhysicsSystem::updateBalls(GameState& state, const GameConfig& cfg, float d
         }
         
         b.pos += b.vel * dt;
+
+        // Shield barrier: bounce balls back instead of losing them.
+        // Positioned a bit "behind" the paddle (towards arenaMaxZ).
+        if (state.shieldTimer > 0.0f) {
+            float barrierZ = state.paddlePos.z + cfg.shieldOffsetZ;
+            // Keep barrier inside the playable removal zone.
+            barrierZ = std::min(barrierZ, 19.0f);
+
+            if (b.vel.z > 0.0f && (b.pos.z + cfg.ballRadius) >= barrierZ) {
+                b.pos.z = barrierZ - cfg.ballRadius - 0.002f;
+                b.vel.z = -std::abs(b.vel.z);
+            }
+        }
         
         // Remove balls that have gone too far
         if (b.pos.z - cfg.ballRadius > 20.0f) {
