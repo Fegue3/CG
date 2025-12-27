@@ -680,9 +680,6 @@ void Game::render() {
 
     // --- SCORE AND WAVE HUD ---
     {
-        float padX = 22.0f;
-        float padTop = 100.0f;
-
         if (m_state.gameType == GameType::ENDLESS) {
             // Endless: HUD at the top-center (white).
             std::string bestStr = std::to_string(m_state.endlessBestScore);
@@ -812,12 +809,7 @@ void Game::render() {
                 }
             }
         } else {
-            // Normal mode: keep the existing score style
-            std::string scoreStr = "Score: " + std::to_string(m_state.score);
-            float scoreScale = 2.10f;
-            float th = m_renderer.getUIFontLineHeight(scoreScale);
-            float ty = (float)fbH - padTop - th;
-            m_renderer.drawUIText(padX, ty, scoreStr, scoreScale, glm::vec3(1.0f, 0.8f, 0.2f));
+            // Normal mode: score HUD removed (per request).
         }
 
     }
