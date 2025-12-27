@@ -26,6 +26,21 @@ struct GameConfig {
     float powerUpVisualScale = 1.15f;
     float slowSpeedFactor = 0.5f;
     float expandScaleFactor = 1.6f;
+
+    // New powerups/curses tuning
+    float fireballDuration = 7.0f;
+    float fireballExplosionRadius = 4.8f; // in world units (XZ)
+    float fireballExplosionFxDuration = 0.45f; // UI ring duration
+
+    float shieldDuration = 7.0f;
+    float shieldOffsetZ = 2.4f; // barrier behind the paddle (towards arenaMaxZ)
+
+    float reverseDuration = 5.0f;
+
+    float tinyDuration = 7.0f;
+    float tinyScaleFactor = 0.60f;
+
+    int lifeLossPenalty = 250; // user request: losing a heart = -points
 };
 
 } // namespace game
