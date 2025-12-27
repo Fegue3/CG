@@ -34,6 +34,12 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     float btn3Y = panelY + 140.0f; // Instructions
     float btn4Y = panelY + 30.0f;  // Exit (bottom)
 
+    // Small "4" test badge inside the bottom button (same coords as in Game.cpp render).
+    float testW = 48.0f;
+    float testH = btnH - 16.0f;
+    float testX = btnX + btnW - 8.0f - testW;
+    float testY = btn4Y + 8.0f;
+
     // If instructions panel is shown, only allow clicking on the panel or outside to close
     if (state.showInstructions) {
         float instrW = 600.0f;
@@ -55,6 +61,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
         if (pointInRectPx(px, py, btnX, btn1Y, btnW, btnH)) {
             state.showInstructions = false;
             state.gameType = GameType::NORMAL;
+            state.testOneBrick = false;
             state.mode = GameMode::PLAYING; // Switch to playing mode
             return true; // Signal that game should init
         }
@@ -63,12 +70,21 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             state.showInstructions = false;
             state.gameType = GameType::ENDLESS;
             state.wave = 1;
+            state.testOneBrick = false;
             state.mode = GameMode::PLAYING; // Switch to playing mode
             return true; // Signal that game should init
         }
         // Instructions button
         if (pointInRectPx(px, py, btnX, btn3Y, btnW, btnH)) {
             state.showInstructions = true;
+            return true;
+        }
+        // Test feature (click the "4" badge): Start a one-brick test level.
+        if (pointInRectPx(px, py, testX, testY, testW, testH)) {
+            state.showInstructions = false;
+            state.gameType = GameType::NORMAL;
+            state.testOneBrick = true;
+            state.mode = GameMode::PLAYING;
             return true;
         }
         // Exit button

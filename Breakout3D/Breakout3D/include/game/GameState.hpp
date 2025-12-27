@@ -69,10 +69,30 @@ struct GameState {
     // Menu state
     int selectedMenuOption = 0; // 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
     bool showInstructions = false;
+    bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
     // Endless danger warning
     bool endlessDangerActive = false;
     float endlessDangerTimer = 0.0f;
     float endlessDangerMaxZ = 0.0f;
+
+    // --- Normal mode "last brick" finisher (short cinematic before WIN overlay) ---
+    bool winFinisherActive = false;
+    float winFinisherTimer = 0.0f;      // burst time (camera break + shockwave)
+    float winFinisherRealTimer = 0.0f;  // real time since start (unscaled)
+
+    // Brick impact tracking (used to anchor VFX like the WIN finisher shockwave)
+    bool lastBrickDestroyedValid = false;
+    glm::vec3 lastBrickDestroyedPos = glm::vec3(0.0f);
+
+    bool winFinisherAnchorValid = false;
+    glm::vec3 winFinisherAnchorPos = glm::vec3(0.0f);
+
+    // During the brief win slow-down, keep the last brick visible (so it "breaks" on the burst).
+    bool winFinisherHoldBrickValid = false;
+    glm::vec3 winFinisherHoldBrickPos = glm::vec3(0.0f);
+    glm::vec3 winFinisherHoldBrickSize = glm::vec3(1.0f);
+    int winFinisherHoldBrickMaxHp = 1;
+    int winFinisherHoldBrickHp = 1;
 };
 
 } // namespace game

@@ -6,12 +6,14 @@
 #include "game/systems/PhysicsSystem.hpp"
 #include "game/systems/CollisionSystem.hpp"
 #include "game/systems/PowerUpSystem.hpp"
+#include "game/effects/WinFinisher.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <string>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/constants.hpp>
 
 namespace game {
 
@@ -65,6 +67,46 @@ void Game::update(const engine::Input& input) {
             if (m_state.mode == GameMode::PLAYING) {
                 init();
             }
+        }
+        return;
+    }
+
+    // Normal mode: when the last brick is destroyed, we play a short "camera break" finisher
+    // before switching to the WIN overlay.
+    if (m_state.winFinisherActive) {
+        // Snappy parry-ish feel: tiny hit-stop, brief slow-mo, then ramp back to 1x.
+        m_state.winFinisherRealTimer += dt;
+        float tr = m_state.winFinisherRealTimer;
+
+        // Keep it subtle: just enough slow-mo to feel "counter-parry", not enough to drag.
+        const float hitStop = 0.045f; // seconds (freeze)
+        const float slowDur = 0.200f; // seconds (slow)
+        const float rampDur = 0.180f; // seconds (ease back to 1x)
+        const float slowScale = 0.25f;
+
+        float timeScale = 1.0f;
+        if (tr < hitStop) {
+            timeScale = 0.0f;
+        } else if (tr < hitStop + slowDur) {
+            timeScale = slowScale;
+        } else if (tr < hitStop + slowDur + rampDur) {
+            float u = (tr - (hitStop + slowDur)) / rampDur; // 0..1
+            u = std::max(0.0f, std::min(1.0f, u));
+            float ease = u * u * (3.0f - 2.0f * u);
+            timeScale = slowScale + (1.0f - slowScale) * ease;
+        } else {
+            timeScale = 1.0f;
+        }
+
+        m_state.winFinisherTimer += dt * timeScale;
+
+        const float dur = 1.05f;
+        if (m_state.winFinisherTimer >= dur) {
+            m_state.winFinisherActive = false;
+            m_state.winFinisherTimer = 0.0f;
+            m_state.winFinisherRealTimer = 0.0f;
+            m_state.winFinisherHoldBrickValid = false;
+            m_state.mode = GameMode::WIN;
         }
         return;
     }
@@ -132,8 +174,16 @@ void Game::update(const engine::Input& input) {
 
     // Check for WIN condition (normal mode only)
     if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::NORMAL && !InitSystem::anyBricksAlive(m_state)) {
-        m_state.mode = GameMode::WIN;
+        // Trigger finisher cinematic (delays WIN overlay).
+        m_state.winFinisherActive = true;
+        m_state.winFinisherTimer = 0.0f;
+        m_state.winFinisherRealTimer = 0.0f;
+        m_state.winFinisherAnchorValid = m_state.lastBrickDestroyedValid;
+        m_state.winFinisherAnchorPos = m_state.lastBrickDestroyedPos;
         m_state.balls.clear();
+        m_state.powerups.clear();
+        // IMPORTANT: don't run the rest of the frame (otherwise "no balls" would cost a life).
+        return;
     }
 
     // GAME OVER / WIN: Click UI logic
@@ -289,7 +339,7 @@ void Game::update(const engine::Input& input) {
     PowerUpSystem::updatePowerUps(m_state, m_cfg, dt);
 
     // Handle lives loss
-    if (m_state.balls.empty()) {
+    if (!m_state.winFinisherActive && m_state.balls.empty()) {
         m_state.lives--;
         if (m_state.lives > 0) {
             Ball b;
@@ -415,6 +465,28 @@ void Game::render() {
         float exitH = m_renderer.getUIFontLineHeight(exitScale);
         m_renderer.drawUIText(btnX + (btnW - exitLabelW) * 0.5f, btn4Y + (btnH - exitH) * 0.5f, "EXIT", exitScale, glm::vec3(1, 1, 1));
 
+        // Small clickable "4" badge for the one-brick test mode.
+        {
+            float badgeW = 48.0f;
+            float badgeH = btnH - 16.0f;
+            float badgeX = btnX + btnW - 8.0f - badgeW;
+            float badgeY = btn4Y + 8.0f;
+            m_renderer.drawUIQuad(badgeX, badgeY, badgeW, badgeH, glm::vec4(0.2f, 0.8f, 1.0f, 1.0f));
+            m_renderer.drawUIQuad(badgeX + 2.0f, badgeY + 2.0f, badgeW - 4.0f, badgeH - 4.0f, glm::vec4(0.06f, 0.06f, 0.10f, 1.0f));
+
+            std::string k = "4";
+            float kScale = 1.4f;
+            float kW = m_renderer.measureUITextWidth(k, kScale);
+            float kH = m_renderer.getUIFontLineHeight(kScale);
+            m_renderer.drawUIText(badgeX + (badgeW - kW) * 0.5f, badgeY + (badgeH - kH) * 0.5f, k, kScale, glm::vec3(0.2f, 0.8f, 1.0f));
+
+            // Hint text under the button
+            std::string hint = "ONE BRICK";
+            float hScale = 0.58f;
+            float hW = m_renderer.measureUITextWidth(hint, hScale);
+            m_renderer.drawUIText(btnX + (btnW - hW) * 0.5f, btn4Y - 20.0f, hint, hScale, glm::vec3(0.6f, 0.85f, 1.0f));
+        }
+
         // Show instructions if toggled
         if (m_state.showInstructions) {
             // Instructions panel
@@ -488,7 +560,25 @@ void Game::render() {
         fov       = 45.0f;
     }
 
+    // --- WIN FINISHER CAMERA (pure math lives in game/effects) ---
+    float rollRad = 0.0f;
+    if (m_state.winFinisherActive) {
+        auto cam = game::effects::computeWinFinisherCamera(
+            camPos, camTarget, fov, base,
+            m_state.winFinisherTimer,
+            m_state.winFinisherRealTimer
+        );
+        camPos = cam.camPos;
+        camTarget = cam.camTarget;
+        fov = cam.fovDeg;
+        rollRad = cam.rollRad;
+    }
+
     glm::mat4 V = glm::lookAt(camPos, camTarget, glm::vec3(0,1,0));
+    if (rollRad != 0.0f) {
+        V = glm::rotate(glm::mat4(1.0f), rollRad, glm::vec3(0, 0, 1)) * V;
+    }
+
     glm::mat4 P = glm::perspective(glm::radians(fov), (float)fbW/(float)fbH, 0.1f, 300.0f);
     m_renderer.setCamera(V, P, camPos);
 
@@ -542,26 +632,30 @@ void Game::render() {
     );
 
     // ✅ BRICKS: trocar para *_1hit / *_2hit / *_3hit (texturas/OBJ)
-    for (const auto& b : m_state.bricks) {
-        if (!b.alive) continue;
-
+    auto pickBrickMesh = [&](int maxHp, int hp) -> const engine::Mesh* {
         const engine::Mesh* m = &m_assets.brick01;
-
-        if (b.maxHp == 4) {
-            if (b.hp == 4)      m = &m_assets.brick04;
-            else if (b.hp == 3) m = &m_assets.brick04_1hit;
-            else if (b.hp == 2) m = &m_assets.brick04_2hit;
-            else                m = &m_assets.brick04_3hit;
-        } else if (b.maxHp == 3) {
-            if (b.hp == 3)      m = &m_assets.brick03;
-            else if (b.hp == 2) m = &m_assets.brick03_1hit;
-            else                m = &m_assets.brick03_2hit;
-        } else if (b.maxHp == 2) {
-            if (b.hp == 2)      m = &m_assets.brick02;
-            else                m = &m_assets.brick02_1hit;
+        if (maxHp == 4) {
+            if (hp == 4)      m = &m_assets.brick04;
+            else if (hp == 3) m = &m_assets.brick04_1hit;
+            else if (hp == 2) m = &m_assets.brick04_2hit;
+            else              m = &m_assets.brick04_3hit;
+        } else if (maxHp == 3) {
+            if (hp == 3)      m = &m_assets.brick03;
+            else if (hp == 2) m = &m_assets.brick03_1hit;
+            else              m = &m_assets.brick03_2hit;
+        } else if (maxHp == 2) {
+            if (hp == 2)      m = &m_assets.brick02;
+            else              m = &m_assets.brick02_1hit;
         } else {
             m = &m_assets.brick01;
         }
+        return m;
+    };
+
+    for (const auto& b : m_state.bricks) {
+        if (!b.alive) continue;
+
+        const engine::Mesh* m = pickBrickMesh(b.maxHp, b.hp);
 
         m_renderer.drawMesh(*m, b.pos, b.size, tint);
     }
@@ -615,6 +709,54 @@ void Game::render() {
 
     // -------- UI PASS (HUD 3D em ortho) --------
     m_renderer.beginUI(fbW, fbH);
+
+    // --- WIN FINISHER OVERLAY: flash + expanding shockwave ("blown air") ---
+    if (m_state.winFinisherActive) {
+        auto o = game::effects::computeWinFinisherOverlay(
+            fbW, fbH, V, P,
+            m_state.winFinisherAnchorPos,
+            m_state.winFinisherTimer,
+            m_state.winFinisherAnchorValid
+        );
+
+        // White flash
+        float flashA = o.flashAlpha;
+        if (flashA > 0.01f) {
+            m_renderer.drawUIQuad(0.0f, 0.0f, (float)fbW, (float)fbH, glm::vec4(1.0f, 1.0f, 1.0f, flashA));
+        }
+
+        // Expanding ring (drawn with triangles)
+        glm::vec2 c = o.centerPx;
+        float r = o.ringRadiusPx;
+        float thick = o.ringThicknessPx;
+
+        float ringA = o.ringAlpha;
+        glm::vec4 ringCol(0.85f, 0.95f, 1.0f, ringA);
+
+        auto drawRing = [&](const glm::vec2& center, float radius, float thickness, const glm::vec4& col) {
+            const int segs = 72;
+            float r0 = std::max(0.0f, radius - thickness * 0.5f);
+            float r1 = radius + thickness * 0.5f;
+            for (int i = 0; i < segs; ++i) {
+                float a0 = (float)i / (float)segs * glm::two_pi<float>();
+                float a1 = (float)(i + 1) / (float)segs * glm::two_pi<float>();
+                glm::vec2 d0(std::cos(a0), std::sin(a0));
+                glm::vec2 d1(std::cos(a1), std::sin(a1));
+
+                glm::vec2 p0o = center + d0 * r1;
+                glm::vec2 p0i = center + d0 * r0;
+                glm::vec2 p1o = center + d1 * r1;
+                glm::vec2 p1i = center + d1 * r0;
+
+                m_renderer.drawUITriangle(p0o, p0i, p1o, col);
+                m_renderer.drawUITriangle(p0i, p1o, p1i, col);
+            }
+        };
+
+        if (ringA > 0.01f) {
+            drawRing(c, r, thick, ringCol);
+        }
+    }
 
     const float padX = 22.0f;
     const float padTop = 18.0f;

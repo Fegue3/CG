@@ -69,6 +69,14 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.endlessDangerActive = false;
     state.endlessDangerTimer = 0.0f;
     state.endlessElapsedTime = 0.0f;
+
+    // Clear transient finisher / debug state.
+    state.winFinisherActive = false;
+    state.winFinisherTimer = 0.0f;
+    state.winFinisherRealTimer = 0.0f;
+    state.lastBrickDestroyedValid = false;
+    state.winFinisherAnchorValid = false;
+    state.winFinisherHoldBrickValid = false;
     
     // For endless mode, wave is already set before calling init()
     // For normal mode, reset wave to 1
@@ -113,6 +121,19 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
     float startZ = cfg.arenaMinZ + 0.85f;
     float totalW = cols * brickSize.x + (cols - 1) * gapX;
     float leftX  = -totalW * 0.5f + brickSize.x * 0.5f;
+
+    // Test feature: spawn just one brick (useful for debugging / finisher testing).
+    if (state.testOneBrick) {
+        Brick b;
+        b.size = brickSize;
+        b.alive = true;
+        b.pos.x = 0.0f;
+        b.pos.y = 0.0f;
+        b.pos.z = startZ + 4.0f * (brickSize.z + gapZ);
+        b.maxHp = b.hp = 1;
+        state.bricks.push_back(b);
+        return;
+    }
 
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < cols; ++c) {

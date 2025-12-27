@@ -87,7 +87,26 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
         if (sphereAabbXZ(ball.pos, cfg.ballRadius, br.pos, br.size)) {
             br.hp--;
             if (br.hp <= 0) {
+                // If this was the LAST brick (normal mode), keep a visual copy for the brief slow-down
+                // so the player sees it "break" exactly when the finisher burst starts.
+                if (state.gameType == GameType::NORMAL && state.mode == GameMode::PLAYING) {
+                    bool anyOtherAlive = false;
+                    for (const auto& other : state.bricks) {
+                        if (&other == &br) continue;
+                        if (other.alive) { anyOtherAlive = true; break; }
+                    }
+                    if (!anyOtherAlive) {
+                        state.winFinisherHoldBrickValid = true;
+                        state.winFinisherHoldBrickPos = br.pos;
+                        state.winFinisherHoldBrickSize = br.size;
+                        state.winFinisherHoldBrickMaxHp = br.maxHp;
+                        state.winFinisherHoldBrickHp = 1; // show the "about to break" look
+                    }
+                }
                 br.alive = false;
+                // Track where the last destroyed brick was (for anchoring VFX).
+                state.lastBrickDestroyedValid = true;
+                state.lastBrickDestroyedPos = br.pos;
                 PowerUpSystem::spawnPowerUp(state, br.pos, cfg.powerUpChance);
                 
                 // Points:
