@@ -100,6 +100,7 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
                 if (pts <= 0) return;
                 if (state.gameType == GameType::ENDLESS) {
                     state.endlessStreakPoints += pts;
+                    state.endlessStreakPosPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
                     state.endlessStreakBanking = false;
                     state.endlessStreakBankTimer = 0.0f;
@@ -110,26 +111,19 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
 
             auto applyPenalty = [&](int pts) {
                 if (pts <= 0) return;
-                int penalty = pts;
                 if (state.gameType == GameType::ENDLESS) {
-                    // User expectation: penalties should affect the REAL score (visible HUD),
-                    // and only then eat into the unbanked streak if needed.
-                    int takeScore = std::min(state.score, pts);
-                    state.score -= takeScore;
-                    pts -= takeScore;
-                    if (pts > 0) {
-                        int takeStreak = std::min(state.endlessStreakPoints, pts);
-                        state.endlessStreakPoints -= takeStreak;
-                        pts -= takeStreak;
-                    }
+                    // User request: penalties should behave EXACTLY like the white streak bank:
+                    // affect the BANK now (can go negative), and only affect real score on commit.
+                    state.endlessStreakPoints -= pts;
+                    state.endlessStreakNegPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
                     state.endlessStreakBanking = false;
                     state.endlessStreakBankTimer = 0.0f;
                 } else {
                     state.score = std::max(0, state.score - pts);
+                    // UI feedback for normal mode (score HUD is hidden but we still show feedback)
+                    state.scorePopups.push_back({ -pts, 0.0f });
                 }
-                // UI feedback (red "-XYZ")
-                state.scorePopups.push_back({ -penalty, 0.0f });
             };
 
             if (p.type == PowerUpType::SLOW) {
