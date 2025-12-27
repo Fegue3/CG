@@ -89,6 +89,13 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.powerups.clear();
     state.expandTimer = 0.0f;
     state.slowTimer = 0.0f;
+    state.fireballTimer = 0.0f;
+    state.shieldTimer = 0.0f;
+    state.reverseTimer = 0.0f;
+    state.tinyTimer = 0.0f;
+    state.fireballExplosions.clear();
+    state.scorePopups.clear();
+    state.pendingRespawnAfterFireball = false;
     state.brickHitCooldown = 0.0f;
 
     // Generate bricks (0 for normal, waveNumber for endless)
