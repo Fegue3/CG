@@ -33,6 +33,10 @@ struct GameState {
     // Endless mode: "streak bank" — points accumulate here and commit to score
     // after a short idle delay (or immediately on game over).
     int endlessStreakPoints = 0;
+    // Split view of the bank so we can show "+gains" and "-penalties" simultaneously.
+    // Net is still `endlessStreakPoints` (pos - neg).
+    int endlessStreakPosPoints = 0;
+    int endlessStreakNegPoints = 0;
     float endlessStreakIdleTimer = 0.0f;
     bool endlessStreakBanking = false;
     float endlessStreakBankTimer = 0.0f;
