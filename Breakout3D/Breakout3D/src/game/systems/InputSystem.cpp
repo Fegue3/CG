@@ -141,6 +141,11 @@ void InputSystem::handleGameInput(GameState& state, const engine::Input& input, 
     float dir = 0.0f;
     if (input.keyDown(engine::Key::A) || input.keyDown(engine::Key::Left))  dir -= 1.0f;
     if (input.keyDown(engine::Key::D) || input.keyDown(engine::Key::Right)) dir += 1.0f;
+
+    // Curse: reverse controls
+    if (state.reverseTimer > 0.0f) {
+        dir = -dir;
+    }
     
     PhysicsSystem::updatePaddle(state, cfg, dir, dt);
 
