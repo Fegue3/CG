@@ -65,6 +65,42 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
         if (std::abs(p.pos.x - state.paddlePos.x) < halfX + cfg.ballRadius &&
             std::abs(p.pos.z - state.paddlePos.z) < halfZ + cfg.ballRadius) {
             
+            // Endless scoring on pickup:
+            // good powerups add points (into the streak bank),
+            // bad powerups (currently SLOW/snail) subtract points.
+            if (state.gameType == GameType::ENDLESS) {
+                auto addStreak = [&](int pts) {
+                    if (pts <= 0) return;
+                    state.endlessStreakPoints += pts;
+                    state.endlessStreakIdleTimer = 0.0f;
+                    state.endlessStreakBanking = false;
+                    state.endlessStreakBankTimer = 0.0f;
+                };
+                auto applyPenalty = [&](int pts) {
+                    if (pts <= 0) return;
+                    // take from unbanked streak first, then from score
+                    int take = std::min(state.endlessStreakPoints, pts);
+                    state.endlessStreakPoints -= take;
+                    pts -= take;
+                    if (pts > 0) {
+                        state.score = std::max(0, state.score - pts);
+                    }
+                    state.endlessStreakIdleTimer = 0.0f;
+                    state.endlessStreakBanking = false;
+                    state.endlessStreakBankTimer = 0.0f;
+                };
+
+                if (p.type == PowerUpType::SLOW) {
+                    applyPenalty(300);
+                } else if (p.type == PowerUpType::EXTRA_LIFE) {
+                    addStreak(500);
+                } else if (p.type == PowerUpType::EXPAND) {
+                    addStreak(250);
+                } else if (p.type == PowerUpType::EXTRA_BALL) {
+                    addStreak(350);
+                }
+            }
+
             applyPowerUpEffect(state, cfg, p.type);
             p.alive = false;
         }
