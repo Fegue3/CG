@@ -10,6 +10,9 @@ uniform vec3 uAlbedo;
 
 uniform int uUseTex;
 uniform sampler2D uTex;
+// 0: modulate base RGB with texture RGB (default for meshes/backgrounds)
+// 1: treat texture R as an alpha mask (default for font atlases)
+uniform int uTexMode;
 
 // UI vs 3D controls
 uniform float uAmbientK;
@@ -27,8 +30,14 @@ out vec4 FragColor;
 
 void main() {
     vec3 base = uAlbedo;
+    float texMask = 1.0;
     if (uUseTex == 1) {
-        base *= texture(uTex, vUV).rgb;
+        vec4 tex = texture(uTex, vUV);
+        if (uTexMode == 0) {
+            base *= tex.rgb;
+        } else if (uTexMode == 1) {
+            texMask = tex.r;
+        }
     }
 
     // Ambient serve para UI/background sem luz
@@ -50,7 +59,7 @@ void main() {
         }
     }
 
-    float alpha = uAlpha;
+    float alpha = uAlpha * texMask;
     if (uUseMask == 1) {
         if (gl_FragCoord.x >= uMaskMin.x && gl_FragCoord.x <= uMaskMax.x &&
             gl_FragCoord.y >= uMaskMin.y && gl_FragCoord.y <= uMaskMax.y) {
