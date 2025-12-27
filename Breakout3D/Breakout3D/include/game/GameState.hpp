@@ -75,6 +75,10 @@ struct GameState {
     // Menu state
     int selectedMenuOption = 0; // 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
     bool showInstructions = false;
+    // Endless danger warning
+    bool endlessDangerActive = false;
+    float endlessDangerTimer = 0.0f;
+    float endlessDangerMaxZ = 0.0f;
 };
 
 } // namespace game
