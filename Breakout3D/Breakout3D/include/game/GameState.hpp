@@ -28,6 +28,14 @@ struct GameState {
 
     int lives = 3;
     int score = 0;
+    // Endless mode: persistent best score (loaded on init, updated/saved during play)
+    int endlessBestScore = 0;
+    // Endless mode: "streak bank" — points accumulate here and commit to score
+    // after a short idle delay (or immediately on game over).
+    int endlessStreakPoints = 0;
+    float endlessStreakIdleTimer = 0.0f;
+    bool endlessStreakBanking = false;
+    float endlessStreakBankTimer = 0.0f;
     int wave = 1;  // Endless mode wave counter
     int bricksDestroyedThisWave = 0;  // Counter for endless mode spawning
     int endlessRowsSpawned = 0;       // Total rows spawned in endless (for HP scaling)
