@@ -1,221 +1,22 @@
 #include "game/Game.hpp"
 #include "engine/Input.hpp"
 #include "game/GameAssets.hpp"
+#include "game/systems/InitSystem.hpp"
+#include "game/systems/InputSystem.hpp"
+#include "game/systems/PhysicsSystem.hpp"
+#include "game/systems/CollisionSystem.hpp"
+#include "game/systems/PowerUpSystem.hpp"
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
-#include <ctime>
 #include <glm/gtc/matrix_transform.hpp>
 
-static float clampf(float v, float a, float b) { return std::max(a, std::min(v, b)); }
-
-static bool sphereAabbXZ(const glm::vec3& c, float r, const glm::vec3& bpos, const glm::vec3& bsize) {
-    float hx = bsize.x * 0.5f;
-    float hz = bsize.z * 0.5f;
-
-    float minX = bpos.x - hx, maxX = bpos.x + hx;
-    float minZ = bpos.z - hz, maxZ = bpos.z + hz;
-
-    float cx = clampf(c.x, minX, maxX);
-    float cz = clampf(c.z, minZ, maxZ);
-
-    float dx = c.x - cx;
-    float dz = c.z - cz;
-    return (dx * dx + dz * dz) <= (r * r);
-}
-
 namespace game {
-
-static bool anyBricksAlive(const GameState& s) {
-    for (const auto& b : s.bricks) if (b.alive) return true;
-    return false;
-}
-
-static void resetBallToPaddle(Ball& b, const glm::vec3& paddlePos, const GameConfig& cfg) {
-    b.attached = true;
-    b.vel = glm::vec3(0.0f);
-    b.pos = paddlePos + glm::vec3(
-        0.0f, 0.0f,
-        -(cfg.paddleSize.z * 0.5f + cfg.ballRadius + 0.15f)
-    );
-}
-
-static void spawnPowerUp(GameState& s, const glm::vec3& pos, float chance) {
-    float r = (float)rand() / (float)RAND_MAX;
-    if (r > chance) return;
-
-    PowerUp p;
-    p.pos = pos;
-    // Lift slightly off the ground initially
-    p.pos.y = 0.4f;
-
-    int r2 = rand() % 100;
-    if (r2 < 15)       p.type = PowerUpType::EXTRA_LIFE; // 15% (was 2%)
-    else if (r2 < 43)  p.type = PowerUpType::EXPAND;     // 28%
-    else if (r2 < 71)  p.type = PowerUpType::SLOW;       // 28%
-    else               p.type = PowerUpType::EXTRA_BALL; // 29%
-    
-    s.powerups.push_back(p);
-}
-
-
-static bool pointInRectPx(float px, float py, float x, float y, float w, float h) {
-    return (px >= x && px <= x + w && py >= y && py <= y + h);
-}
 
 Game::Game(engine::Window& window, engine::Time& time, engine::Renderer& renderer, GameAssets& assets)
 : m_window(window), m_time(time), m_renderer(renderer), m_assets(assets) {}
 
-void Game::generateBricks(int waveNumber) {
-    m_state.bricks.clear();
-    
-    const int cols = 12;
-    int rows = 9;  // Default for normal mode
-
-    // Adjust difficulty for endless mode
-    if (waveNumber > 0) {
-        // Endless mode: increase difficulty each wave
-        rows = 9 + (waveNumber / 2);               // Add rows every 2 waves (max 14 at wave 10+)
-    }
-
-    glm::vec3 brickSize(2.95f, 0.7f, 1.30f); 
-    float gapX = 0.04f;
-    float gapZ = 0.03f;
-
-    float startZ = m_cfg.arenaMinZ + 0.85f;
-    float totalW = cols * brickSize.x + (cols - 1) * gapX;
-    float leftX  = -totalW * 0.5f + brickSize.x * 0.5f;
-
-    for (int r = 0; r < rows; ++r) {
-        for (int c = 0; c < cols; ++c) {
-            Brick b;
-            b.size = brickSize;
-            b.alive = true;
-
-            b.pos.x = leftX + c * (brickSize.x + gapX);
-            b.pos.y = 0.0f;
-            b.pos.z = startZ + r * (brickSize.z + gapZ);
-
-            // Split wall into Front (closer to paddle) and Back (further away)
-            // r: 0 is Top/Back, rows-1 is Bottom/Front
-            bool isFrontHalf = (r >= rows / 2);
-
-            if (isFrontHalf) {
-                // Front half: Easier bricks (mostly 1, 2, some 3)
-                int r2 = rand() % 100;
-                if (r2 < 45)      b.maxHp = b.hp = 1; // Green
-                else if (r2 < 85) b.maxHp = b.hp = 2; // Yellow
-                else              b.maxHp = b.hp = 3; // Blue
-            } else {
-                // Back half: Random bricks
-                if (waveNumber == 0) {
-                    // Normal mode: random HP (1-4)
-                    b.maxHp = b.hp = 1 + (rand() % 4);
-                } else {
-                    // Endless mode: random HP with wave-based bonus
-                    int hpBonus = waveNumber / 5;  // +1 HP every 5 waves
-                    int baseHp = 1 + (rand() % 4);  // Random 1-4
-                    b.maxHp = b.hp = std::min(6, baseHp + hpBonus);
-                }
-            }
-
-            m_state.bricks.push_back(b);
-        }
-    }
-}
-
-void Game::spawnIncrementalBricks(int count, int waveNumber) {
-    // Spawn new bricks by inserting rows at the top, pushing existing bricks down
-    glm::vec3 brickSize(2.95f, 0.7f, 1.30f);
-    float gapX = 0.04f;
-    float gapZ = 0.03f;
-
-    const int cols = 12;
-    float totalW = cols * brickSize.x + (cols - 1) * gapX;
-    float leftX = -totalW * 0.5f + brickSize.x * 0.5f;
-    float stepZ = brickSize.z + gapZ;
-    float topZ = m_cfg.arenaMinZ + 0.85f;  // reference for row 0
-
-    // Determine how many full rows to insert at the top
-    int rowsToInsert = (count + cols - 1) / cols; // ceil(count/cols)
-
-    // Push all existing alive bricks down by rowsToInsert
-    float push = rowsToInsert * stepZ;
-    for (auto& br : m_state.bricks) {
-        if (!br.alive) continue;
-        br.pos.z += push;
-    }
-
-    int totalRowsBefore = m_state.endlessRowsSpawned;
-
-    for (int i = 0; i < count; ++i) {
-        Brick b;
-        b.size = brickSize;
-        b.alive = true;
-
-        int col = i % cols;
-        int rowLocal = (i / cols); // new rows start at 0 at the top
-        int rowGlobal = totalRowsBefore + rowLocal;
-
-        b.pos.x = leftX + col * (brickSize.x + gapX);
-        b.pos.y = 0.0f;
-        b.pos.z = topZ + rowLocal * stepZ;  // place below the current top
-
-        // Random HP with difficulty based on cumulative rows spawned in endless
-        int baseHp = 1 + (rand() % 4);  // Random 1-4
-        int difficultyBonus = (rowGlobal / 20); // every 20 rows increases bonus by 1
-        b.maxHp = b.hp = std::min(6, baseHp + difficultyBonus);
-
-        m_state.bricks.push_back(b);
-    }
-
-    m_state.endlessRowsSpawned = totalRowsBefore + rowsToInsert;
-
-    // Spawn executed; no HUD ping
-}
-
 void Game::init() {
-    srand(static_cast<unsigned int>(time(nullptr)));
-    m_state.mode = GameMode::PLAYING;
-    m_state.lives = 3;
-    m_state.bricksDestroyedThisWave = 0;
-    m_state.endlessRowsSpawned = 0;
-    m_state.score = 0;
-    m_state.endlessDangerActive = false;
-    m_state.endlessDangerTimer = 0.0f;
-    
-    // For endless mode, wave is already set before calling init()
-    // For normal mode, reset wave to 1
-    if (m_state.gameType == GameType::NORMAL) {
-        m_state.wave = 1;
-    }
-
-    m_state.paddlePos = glm::vec3(
-        0.0f, 0.0f,
-        m_cfg.arenaMaxZ - (m_cfg.paddleSize.z * 0.5f) - 0.25f
-    );
-
-    m_state.balls.clear();
-    Ball firstBall;
-    resetBallToPaddle(firstBall, m_state.paddlePos, m_cfg);
-    m_state.balls.push_back(firstBall);
-
-    m_state.powerups.clear();
-    m_state.expandTimer = 0.0f;
-    m_state.slowTimer = 0.0f;
-
-    m_state.brickHitCooldown = 0.0f;
-
-    // Generate bricks (0 for normal, waveNumber for endless)
-    int waveToGenerate = (m_state.gameType == GameType::ENDLESS) ? m_state.wave : 0;
-    int rowsInitial = 9;
-    if (m_state.gameType == GameType::ENDLESS) {
-        rowsInitial = 9 + (m_state.wave / 2);
-    }
-    generateBricks(waveToGenerate);
-    if (m_state.gameType == GameType::ENDLESS) {
-        m_state.endlessRowsSpawned = rowsInitial;
-    }
+    InitSystem::initGame(m_state, m_cfg);
 }
 
 void Game::update(const engine::Input& input) {
@@ -223,132 +24,84 @@ void Game::update(const engine::Input& input) {
 
     // =========== MENU LOGIC ===========
     if (m_state.mode == GameMode::MENU) {
+        if (InputSystem::handleMenuInput(m_state, input, m_window)) {
+            // If menu handled input and signaled init needed
+            if (m_state.mode == GameMode::PLAYING) {
+                init();
+            }
+        }
+        return;
+    }
+
+    // Handle game input (pause, paddle movement, ball launch, etc.)
+    InputSystem::handleGameInput(m_state, input, m_cfg, m_window, dt);
+
+    // PAUSED: Click UI logic for buttons
+    if (m_state.mode == GameMode::PAUSED) {
         auto [fbW, fbH] = m_window.getFramebufferSize();
         auto [px, py_raw] = input.mousePosFbPx();
         float py = (float)fbH - py_raw;
         bool click = input.mousePressed(engine::MouseButton::Left);
 
-        // Menu button positions
-        float panelW = 500.0f;
-        float panelH = 480.0f;
+        // Calculate button positions (matching render layout)
+        float panelW = 450.0f;
+        float panelH = 280.0f; // Taller to fit PAUSED text + buttons
         float panelX = (fbW - panelW) * 0.5f;
         float panelY = (fbH - panelH) * 0.5f;
-
-        float btnW = 200.0f;
-        float btnH = 70.0f;
-        float btnX = panelX + (panelW - btnW) * 0.5f;
         
-        // Button positions (from top to bottom)
-        float btn1Y = panelY + 360.0f; // Normal Mode (top)
-        float btn2Y = panelY + 250.0f; // Endless Mode
-        float btn3Y = panelY + 140.0f; // Instructions
-        float btn4Y = panelY + 30.0f;  // Exit (bottom)
-
-        // If instructions panel is shown, only allow clicking on the panel or outside to close
-        if (m_state.showInstructions) {
-            float instrW = 600.0f;
-            float instrH = 320.0f;
-            float instrX = (fbW - instrW) * 0.5f;
-            float instrY = (fbH - instrH) * 0.5f;
-
-            if (click) {
-                // Click outside the instructions panel = close it
-                if (!pointInRectPx(px, py, instrX, instrY, instrW, instrH)) {
-                    m_state.showInstructions = false;
-                }
-            }
-            return;
-        }
+        float btnW = 140.0f;
+        float btnH = 60.0f;
+        float btnGap = 50.0f;
+        float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
+        float btnX_right = btnX_left + btnW + btnGap;
+        float btnY = panelY + 40.0f; // Position at bottom of panel
 
         if (click) {
-            // Normal Mode button
-            if (pointInRectPx(px, py, btnX, btn1Y, btnW, btnH)) {
-                m_state.showInstructions = false;
-                m_state.gameType = GameType::NORMAL;
+            // Left button: Restart
+            if (px >= btnX_left && px <= btnX_left + btnW && py >= btnY && py <= btnY + btnH) {
                 init();
                 return;
             }
-            // Endless Mode button
-            if (pointInRectPx(px, py, btnX, btn2Y, btnW, btnH)) {
+            // Right button: Back to Menu
+            if (px >= btnX_right && px <= btnX_right + btnW && py >= btnY && py <= btnY + btnH) {
+                m_state.mode = GameMode::MENU;
                 m_state.showInstructions = false;
-                m_state.gameType = GameType::ENDLESS;
-                m_state.wave = 1;
-                init();
-                return;
-            }
-            // Instructions button
-            if (pointInRectPx(px, py, btnX, btn3Y, btnW, btnH)) {
-                m_state.showInstructions = true;
-            }
-            // Exit button
-            if (pointInRectPx(px, py, btnX, btn4Y, btnW, btnH)) {
-                m_window.requestClose();
                 return;
             }
         }
-
-        return; // Don't run game logic while in menu
+        return;
     }
 
-    // Toggle Pause with Escape
-    if (input.keyPressed(engine::Key::Escape)) {
-        if (m_state.mode == GameMode::PLAYING) m_state.mode = GameMode::PAUSED;
-        else if (m_state.mode == GameMode::PAUSED) m_state.mode = GameMode::PLAYING;
-    }
-
-    if (m_state.mode == GameMode::PAUSED) return;
-
-    auto [fbW, fbH] = m_window.getFramebufferSize();
-
-    // --- BG Selector HUD Logic ---
-    {
-        float boxSize = 30.0f;
-        float gap = 10.0f;
-        float startX = fbW - (boxSize + gap) * 5.0f - 20.0f;
-        float startY = 20.0f; // Top padding
-
-        auto [mx, my_raw] = input.mousePosFbPx();
-        float my = (float)fbH - my_raw; 
-
-        if (input.mousePressed(engine::MouseButton::Left)) {
-            for (int i = -1; i < 4; i++) {
-                float bx = startX + (i + 1) * (boxSize + gap);
-                float by = fbH - startY - boxSize;
-                if (mx >= bx && mx <= bx + boxSize && my >= by && my <= by + boxSize) {
-                    m_state.currentBg = i;
-                }
-            }
-        }
-    }
-
-    if (input.keyPressed(engine::Key::K1)) m_state.cameraMode = 1;
-    if (input.keyPressed(engine::Key::K2)) m_state.cameraMode = 2;
+    // Debug key for endless mode
     if (m_state.gameType == GameType::ENDLESS && input.keyPressed(engine::Key::K3)) {
-        // Debug: force-spawn a full top row to keep the wall tidy
-        spawnIncrementalBricks(12, m_state.wave);
+        InitSystem::spawnIncrementalBricks(m_state, m_cfg, 12, m_state.wave);
         m_state.pendingSpawnBricks = 0;
-        m_state.endlessSpawnCooldown = 0.5f; // avoid immediate repeats
+        m_state.endlessSpawnCooldown = 0.5f;
         m_state.endlessAutoTimer = 0.0f;
     }
+
+    // Update timers
     if (m_state.brickHitCooldown > 0.0f)
         m_state.brickHitCooldown = std::max(0.0f, m_state.brickHitCooldown - dt);
     if (m_state.endlessSpawnCooldown > 0.0f)
         m_state.endlessSpawnCooldown = std::max(0.0f, m_state.endlessSpawnCooldown - dt);
     if (m_state.gameType == GameType::ENDLESS)
         m_state.endlessAutoTimer += dt;
+    if (m_state.expandTimer > 0.0f) m_state.expandTimer = std::max(0.0f, m_state.expandTimer - dt);
+    if (m_state.slowTimer > 0.0f) m_state.slowTimer = std::max(0.0f, m_state.slowTimer - dt);
 
-    // Only check for WIN in normal mode (endless never wins)
-    if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::NORMAL && !anyBricksAlive(m_state)) {
+    // Check for WIN condition (normal mode only)
+    if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::NORMAL && !InitSystem::anyBricksAlive(m_state)) {
         m_state.mode = GameMode::WIN;
         m_state.balls.clear();
     }
 
-
-    // ------------- GAME OVER / WIN: Click UI logic -------------
+    // GAME OVER / WIN: Click UI logic
     if (m_state.mode == GameMode::GAME_OVER || m_state.mode == GameMode::WIN) {
-        auto [px, py_raw]   = input.mousePosFbPx();
-        float py = (float)fbH - py_raw; // Flip Y: Top-Left to Bottom-Left
-        bool click      = input.mousePressed(engine::MouseButton::Left);
+        auto [fbW, fbH] = m_window.getFramebufferSize();
+        auto [px, py_raw] = input.mousePosFbPx();
+        float py = (float)fbH - py_raw;
+        bool click = input.mousePressed(engine::MouseButton::Left);
 
         float panelW = 450.0f;
         float panelH = 200.0f;
@@ -363,176 +116,54 @@ void Game::update(const engine::Input& input) {
         float btnY = panelY + 40.0f;
 
         if (click) {
-            // Left button: Restart game immediately
-            if (pointInRectPx(px, py, btnX_left, btnY, btnW, btnH)) { 
-                init();  // Start new game right away
-                return; 
+            // Left button: Restart
+            if (px >= btnX_left && px <= btnX_left + btnW && py >= btnY && py <= btnY + btnH) {
+                init();
+                return;
             }
             // Right button: Back to Menu
-            if (pointInRectPx(px, py, btnX_right, btnY, btnW, btnH)) { 
+            if (px >= btnX_right && px <= btnX_right + btnW && py >= btnY && py <= btnY + btnH) {
                 m_state.mode = GameMode::MENU;
                 m_state.showInstructions = false;
-                return; 
+                return;
             }
         }
         return;
     }
 
-    // ----------------- PLAYING -----------------
-    // Timers
-    if (m_state.expandTimer > 0.0f) m_state.expandTimer = std::max(0.0f, m_state.expandTimer - dt);
-    if (m_state.slowTimer > 0.0f)   m_state.slowTimer = std::max(0.0f, m_state.slowTimer - dt);
+    // =========== PLAYING STATE ===========
+    
+    // Update physics
+    PhysicsSystem::updateBalls(m_state, m_cfg, dt);
 
-    float currentPaddleSpeed = m_cfg.paddleSpeed;
-    if (m_state.slowTimer > 0.0f) currentPaddleSpeed *= m_cfg.slowSpeedFactor;
-
+    // Calculate current paddle size for collisions
     glm::vec3 currentPaddleSize = m_cfg.paddleSize;
     if (m_state.expandTimer > 0.0f) currentPaddleSize.x *= m_cfg.expandScaleFactor;
 
-    float dir = 0.0f;
-    if (input.keyDown(engine::Key::A) || input.keyDown(engine::Key::Left))  dir -= 1.0f;
-    if (input.keyDown(engine::Key::D) || input.keyDown(engine::Key::Right)) dir += 1.0f;
+    // Handle collisions for each ball
+    for (auto& ball : m_state.balls) {
+        if (ball.attached) continue;
 
-    m_state.paddlePos.x += dir * currentPaddleSpeed * dt;
-
-    float paddleHalfX = currentPaddleSize.x * 0.5f;
-    m_state.paddlePos.x = std::clamp(
-        m_state.paddlePos.x,
-        m_cfg.arenaMinX + paddleHalfX,
-        m_cfg.arenaMaxX - paddleHalfX
-    );
-
-    // --- BALLS UPDATE ---
-    for (size_t i = 0; i < m_state.balls.size(); ) {
-        Ball& b = m_state.balls[i];
-
-        if (b.attached) {
-            resetBallToPaddle(b, m_state.paddlePos, m_cfg);
-            if (input.keyDown(engine::Key::Space)) {
-                b.attached = false;
-                glm::vec3 d = glm::normalize(glm::vec3(0.30f, 0.0f, -1.0f));
-                b.vel = d * m_cfg.ballSpeed;
-            }
-            i++;
-            continue;
-        }
-
-        b.pos += b.vel * dt;
-
-        // walls bounce
-        if (b.pos.x - m_cfg.ballRadius < m_cfg.arenaMinX) {
-            b.pos.x = m_cfg.arenaMinX + m_cfg.ballRadius;
-            b.vel.x = std::abs(b.vel.x);
-        }
-        if (b.pos.x + m_cfg.ballRadius > m_cfg.arenaMaxX) {
-            b.pos.x = m_cfg.arenaMaxX - m_cfg.ballRadius;
-            b.vel.x = -std::abs(b.vel.x);
-        }
-        if (b.pos.z - m_cfg.ballRadius < m_cfg.arenaMinZ) {
-            b.pos.z = m_cfg.arenaMinZ + m_cfg.ballRadius;
-            b.vel.z = std::abs(b.vel.z);
-        }
+        // World collisions (walls)
+        CollisionSystem::handleWorldCollisions(ball, m_cfg);
 
         // Paddle collision
-        {
-            float halfZ = currentPaddleSize.z * 0.5f;
-            float minX = m_state.paddlePos.x - paddleHalfX;
-            float maxX = m_state.paddlePos.x + paddleHalfX;
-            float minZ = m_state.paddlePos.z - halfZ;
-            float maxZ = m_state.paddlePos.z + halfZ;
-
-            float cx = clampf(b.pos.x, minX, maxX);
-            float cz = clampf(b.pos.z, minZ, maxZ);
-
-            float dx = b.pos.x - cx;
-            float dz = b.pos.z - cz;
-
-            if (dx*dx + dz*dz <= m_cfg.ballRadius*m_cfg.ballRadius) {
-                // Hitting the front face
-                if (cz == minZ && b.vel.z > 0.0f) {
-                    b.pos.z = minZ - m_cfg.ballRadius - 0.002f;
-                    float t = (b.pos.x - m_state.paddlePos.x) / paddleHalfX;
-                    t = clampf(t, -1.0f, 1.0f);
-                    float ang = t * glm::radians(60.0f);
-                    b.vel.x = std::sin(ang) * m_cfg.ballSpeed;
-                    b.vel.z = -std::cos(ang) * m_cfg.ballSpeed;
-                }
-                // Hitting the sides
-                else if (cx == minX || cx == maxX) {
-                    b.vel.x = -b.vel.x;
-                    float sideSign = (b.pos.x < cx) ? -1.0f : 1.0f;
-                    b.pos.x = cx + sideSign * (m_cfg.ballRadius + 0.002f);
-                }
-            }
-        }
+        CollisionSystem::handlePaddleCollision(ball, m_state.paddlePos, currentPaddleSize, m_cfg);
 
         // Brick collisions
-        if (m_state.brickHitCooldown <= 0.0f) {
-            for (auto& br : m_state.bricks) {
-                if (!br.alive) continue;
-                if (sphereAabbXZ(b.pos, m_cfg.ballRadius, br.pos, br.size)) {
-                    br.hp--;
-                    if (br.hp <= 0) {
-                        br.alive = false;
-                        spawnPowerUp(m_state, br.pos, m_cfg.powerUpChance);
-                        
-                        // Add score based on brick HP and wave
-                        int baseScore = br.maxHp * 100;  // More points for harder bricks
-                        int waveBonus = (m_state.gameType == GameType::ENDLESS) ? m_state.wave * 50 : 0;
-                        m_state.score += baseScore + waveBonus;
-                        
-                        // Count destroyed bricks for endless mode spawning
-                        if (m_state.gameType == GameType::ENDLESS) {
-                            m_state.bricksDestroyedThisWave++;
-
-                            // Queue new bricks whenever threshold is reached (spawn after loop)
-                            if (m_state.bricksDestroyedThisWave >= 15) { // spawn a row every 15 bricks destroyed
-                                m_state.pendingSpawnBricks += 12; // add full rows
-                                // Keep remainder in case multiple bricks are destroyed rapidly
-                                m_state.bricksDestroyedThisWave -= 15;
-                            }
-                        }
-                    }
-
-                    glm::vec3 diff = b.pos - br.pos;
-                    float ax = std::abs(diff.x) / (br.size.x * 0.5f);
-                    float az = std::abs(diff.z) / (br.size.z * 0.5f);
-
-                    if (ax > az) {
-                        b.vel.x = -b.vel.x;
-                        float sign = (diff.x >= 0.0f) ? 1.0f : -1.0f;
-                        b.pos.x = br.pos.x + sign * (br.size.x * 0.5f + m_cfg.ballRadius + 0.002f);
-                    } else {
-                        b.vel.z = -b.vel.z;
-                        float sign = (diff.z >= 0.0f) ? 1.0f : -1.0f;
-                        b.pos.z = br.pos.z + sign * (br.size.z * 0.5f + m_cfg.ballRadius + 0.002f);
-                    }
-                    m_state.brickHitCooldown = 0.045f;
-                    break;
-                }
-            }
-        }
-
-        // Ball lost check - fly away just a bit
-        if (b.pos.z - m_cfg.ballRadius > 20.0f) {
-            m_state.balls.erase(m_state.balls.begin() + i);
-        } else {
-            i++;
-        }
+        CollisionSystem::handleBrickCollisions(ball, m_state, m_cfg);
     }
 
-    // Perform any queued brick spawns now (safe — outside iteration loops)
+    // Perform queued brick spawns (endless mode)
     if (m_state.gameType == GameType::ENDLESS && m_state.pendingSpawnBricks > 0) {
-        spawnIncrementalBricks(m_state.pendingSpawnBricks, m_state.wave);
+        InitSystem::spawnIncrementalBricks(m_state, m_cfg, m_state.pendingSpawnBricks, m_state.wave);
         m_state.pendingSpawnBricks = 0;
     }
 
-    // (Removed auto/fallback spawns; now spawning is strictly tied to bricks destroyed or manual debug key)
-
-    // Lose condition: a brick reached the paddle zone + Danger Warning
+    // Endless mode: check for lose condition (brick reached paddle)
     if (m_state.gameType == GameType::ENDLESS) {
-        float limitZ = m_state.paddlePos.z - 0.5f; // small margin above paddle
-        float warningThresholdZ = limitZ - (1.33f * 3.0f); // ~3 rows away
+        float limitZ = m_state.paddlePos.z - 0.5f;
+        float warningThresholdZ = limitZ - (1.33f * 3.0f);
         
         float maxZFound = -20.0f;
         bool anyBricksAliveInEndless = false;
@@ -562,59 +193,18 @@ void Game::update(const engine::Input& input) {
         }
     }
 
-    // --- POWERUPS UPDATE ---
-    for (size_t i = 0; i < m_state.powerups.size(); ) {
-        PowerUp& p = m_state.powerups[i];
-        p.pos.z += m_cfg.powerUpDropSpeed * dt;
+    // Update power-ups
+    PowerUpSystem::updatePowerUps(m_state, m_cfg, dt);
 
-        // Collision with paddle
-        float halfX = currentPaddleSize.x * 0.5f;
-        float halfZ = currentPaddleSize.z * 0.5f;
-        if (std::abs(p.pos.x - m_state.paddlePos.x) < halfX + m_cfg.ballRadius &&
-            std::abs(p.pos.z - m_state.paddlePos.z) < halfZ + m_cfg.ballRadius) {
-            
-            // Activate
-            if (p.type == PowerUpType::EXTRA_LIFE) {
-                m_state.lives++;
-            } else if (p.type == PowerUpType::EXTRA_BALL) {
-                // Spawn new balls from the first active ball, or paddle if none
-                glm::vec3 spawnPos = m_state.paddlePos + glm::vec3(0, 0, -0.5f);
-                if (!m_state.balls.empty()) {
-                    spawnPos = m_state.balls[0].pos;
-                }
-                for (int k = 0; k < 3; k++) {
-                    Ball nb;
-                    nb.pos = spawnPos;
-                    float ang = glm::radians(-30.0f + k * 30.0f);
-                    nb.vel = glm::vec3(std::sin(ang), 0.0f, -std::cos(ang)) * m_cfg.ballSpeed;
-                    nb.attached = false;
-                    m_state.balls.push_back(nb);
-                }
-            } else if (p.type == PowerUpType::SLOW) {
-                m_state.slowTimer = m_cfg.powerUpDuration;
-            } else if (p.type == PowerUpType::EXPAND) {
-                m_state.expandTimer = m_cfg.powerUpDuration;
-            }
-
-            p.alive = false;
-        }
-
-        if (!p.alive || p.pos.z > 20.0f) {
-            m_state.powerups.erase(m_state.powerups.begin() + i);
-        } else {
-            i++;
-        }
-    }
-
-    // --- LIVES LOSS ---
+    // Handle lives loss
     if (m_state.balls.empty()) {
         m_state.lives--;
         if (m_state.lives > 0) {
             Ball b;
-            resetBallToPaddle(b, m_state.paddlePos, m_cfg);
+            PhysicsSystem::resetBallToPaddle(b, m_state.paddlePos, m_cfg);
             m_state.balls.push_back(b);
         } else {
-            m_state.mode = anyBricksAlive(m_state) ? GameMode::GAME_OVER : GameMode::WIN;
+            m_state.mode = InitSystem::anyBricksAlive(m_state) ? GameMode::GAME_OVER : GameMode::WIN;
         }
     }
 }
@@ -760,6 +350,23 @@ void Game::render() {
     glm::mat4 P = glm::perspective(glm::radians(fov), (float)fbW/(float)fbH, 0.1f, 300.0f);
     m_renderer.setCamera(V, P, camPos);
 
+    // Precompute (in 3D camera space) the screen-space Y of the "danger line"
+    // so the UI pass can apply a filter only from that line downwards.
+    // User requested a clean rectangular band (straight line), so we use a single Y.
+    float dangerLineScreenY = -1.0f; // UI pixels, origin at bottom
+    if (m_state.gameType == GameType::ENDLESS && m_state.endlessDangerActive) {
+        // NOTE: brick row step in InitSystem is ~1.33 (brickSize.z 1.30 + gapZ ~0.03).
+        // Using +1.33f starts the filter one row BELOW the bricks. We want it to cover the next row up,
+        // so we project the actual front edge of the bricks (no extra offset).
+        glm::vec3 worldPos(0.0f, 0.0f, m_state.endlessDangerMaxZ);
+        glm::vec4 clip = P * V * glm::vec4(worldPos, 1.0f);
+        if (std::abs(clip.w) > 1e-6f) {
+            float ndcY = clip.y / clip.w; // -1..1
+            dangerLineScreenY = (ndcY * 0.5f + 0.5f) * (float)fbH;
+            dangerLineScreenY = std::max(0.0f, std::min((float)fbH, dangerLineScreenY));
+        }
+    }
+
     // ✅ NÃO usamos tint para “dar cor” (só deixa as texturas falarem)
     glm::vec3 tint(1.0f);
 
@@ -894,71 +501,35 @@ void Game::render() {
         m_renderer.drawMesh(m_assets.heart, M, col);
     }
 
-    // Overlay (Pause / Game Over / Win)
-    if (m_state.mode != GameMode::PLAYING) {
-        float panelW = 450.0f;
-        float panelH = 200.0f;
-        float panelX = (fbW - panelW) * 0.5f;
-        float panelY = (fbH - panelH) * 0.5f;
-        
-        if (m_state.mode == GameMode::PAUSED) {
-            // 1. Full screen masked overlay (dimmed outside, clear inside)
-            std::string msg = "PAUSED";
-            float scale = 3.0f; 
-            float charW = 14.0f * scale;
-            float charSpacing = 4.0f * scale;
-            float tw = msg.size() * charW + (msg.size() - 1) * charSpacing;
-            float th = 20.0f * scale;
-            
-            float tx = (fbW - tw) * 0.5f;
-            float ty = (fbH - th) * 0.5f; 
-            float padding = 40.0f;
+    // --- DANGER ZONE FILTER (draw BEFORE pause/gameover overlay so overlays stay on top) ---
+    if (m_state.gameType == GameType::ENDLESS &&
+        m_state.endlessDangerActive &&
+        (m_state.mode == GameMode::PLAYING || m_state.mode == GameMode::PAUSED) &&
+        m_state.endlessDangerTimer < 10.0f) {
 
-            // Hole should exactly match the box we draw later
-            glm::vec2 maskMin(tx - padding, ty - padding);
-            glm::vec2 maskMax(tx + tw + padding, ty + th + padding);
-            m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0, 0, 0, 0.70f), true, maskMin, maskMax); // Darker dimming
+        float screenY = (dangerLineScreenY >= 0.0f) ? dangerLineScreenY : (float)fbH * 0.30f;
+        screenY = std::max(0.0f, std::min((float)fbH, screenY));
 
-            // 2. Pause box and text - Fully opaque box for maximum visibility
-            m_renderer.drawUIQuad(tx - padding, ty - padding, tw + padding * 2, th + padding * 2, glm::vec4(0.06f, 0.06f, 0.06f, 1.0f));
-            m_renderer.drawUIText(tx, ty, msg, scale, glm::vec3(1, 1, 1));
-        } else {
-            // Full screen masked overlay for Game Over / Win
-            glm::vec2 maskMin(panelX, panelY);
-            glm::vec2 maskMax(panelX + panelW, panelY + panelH);
-            m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0, 0, 0, 0.80f), true, maskMin, maskMax);
+        // Clean "real warning" flash: smooth fade in/out (no harsh on/off, no double-strobe).
+        // Keep in sync with text/signs by using the same intensity curve.
+        const float period = 0.95f; // seconds
+        float ph = std::fmod(m_state.endlessDangerTimer, period);
+        if (ph < 0.0f) ph += period;
+        float x = ph / period; // 0..1
+        // triangle wave 0..1..0
+        float tri = 1.0f - std::abs(2.0f * x - 1.0f);
+        // smoothstep for clean easing
+        float pulse = tri * tri * (3.0f - 2.0f * tri);
+        // slightly emphasize the peak
+        pulse = std::pow(pulse, 1.15f);
 
-            // Panel for Game Over / Win - Fully opaque
-            m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.08f, 1.0f));
-            
-            std::string title = (m_state.mode == GameMode::GAME_OVER) ? "GAME OVER" : "WINNER!";
-            float tw = title.size() * 20.0f + (title.size() - 1) * 6.0f;
-            float tx = panelX + (panelW - tw * 1.5f) * 0.5f;
-            m_renderer.drawUIText(tx, panelY + panelH - 60.0f, title, 1.5f, glm::vec3(1, 1, 1));
-
-            // Buttons
-            float btnW = 140.0f;
-            float btnH = 60.0f;
-            float btnGap = 50.0f;
-            float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
-            float btnX_right = btnX_left + btnW + btnGap;
-            float btnY = panelY + 40.0f;
-            
-            m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
-            m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
-            
-            std::string leftLabel = "RETRY";
-            std::string rightLabel = "MENU";
-            
-            float labelW = 14.0f;
-            float labelSpacing = 4.0f;
-            float ltw = leftLabel.size() * labelW + (leftLabel.size() - 1) * labelSpacing;
-            float rtw = rightLabel.size() * labelW + (rightLabel.size() - 1) * labelSpacing;
-            
-            m_renderer.drawUIText(btnX_left + (btnW - ltw) * 0.5f,  btnY + (btnH - 20.0f) * 0.5f, leftLabel, 1.0f, glm::vec3(1, 1, 1));
-            m_renderer.drawUIText(btnX_right + (btnW - rtw) * 0.5f, btnY + (btnH - 20.0f) * 0.5f, rightLabel, 1.0f, glm::vec3(1, 1, 1));
+        float baseA = 0.06f + 0.30f * pulse; // fades in/out with the warning
+        if (baseA > 0.01f) {
+            m_renderer.drawUIQuad(0.0f, 0.0f, (float)fbW, screenY, glm::vec4(1.0f, 0.0f, 0.0f, baseA));
         }
     }
+
+    // (Overlay is drawn at the end of UI so it truly sits on top of everything.)
 
     // --- SCORE AND WAVE HUD ---
     {
@@ -974,31 +545,50 @@ void Game::render() {
             std::string waveStr = "Wave: " + std::to_string(m_state.wave);
             m_renderer.drawUIText(padX, (float)fbH - padTop - 35.0f, waveStr, 1.0f, glm::vec3(0.2f, 0.8f, 1.0f));
 
-            if (m_state.endlessDangerActive && m_state.mode == GameMode::PLAYING) {
-                float flash = (std::sin(m_state.endlessDangerTimer * 10.0f) * 0.5f + 0.5f);
-                float triAlpha = 0.4f + 0.5f * flash; // Pulsing transparency
-
-                // 1. Dynamic Pulsing Red "Blur" Overlay (Moved OUTSIDE 10s timer)
-                // Project one row BELOW the lowest brick row to make it "1 row smaller"
-                glm::vec3 brickWorldPos(0.0f, 0.0f, m_state.endlessDangerMaxZ + 1.33f);
-                glm::vec4 ndc = m_renderer.getP() * m_renderer.getV() * glm::vec4(brickWorldPos, 1.0f);
-                float screenY = ((ndc.y / ndc.w) * 0.5f + 0.5f) * (float)fbH;
-                
-                float overlayH = screenY;
-                // POP! High intensity, permanent while danger active
-                m_renderer.drawUIQuad(0.0f, 0.0f, (float)fbW, overlayH, glm::vec4(1.0f, 0.0f, 0.0f, 0.20f + 0.35f * flash));
-
+            if (m_state.endlessDangerActive && (m_state.mode == GameMode::PLAYING || m_state.mode == GameMode::PAUSED)) {
                 if (m_state.endlessDangerTimer < 10.0f) {
-                    // 2. Signs (Red, Big & Transparent)
-                    if (flash > 0.4f) {
+                    // Same clean fade in/out as the filter above (keeps everything synced).
+                    const float period = 0.95f;
+                    float ph = std::fmod(m_state.endlessDangerTimer, period);
+                    if (ph < 0.0f) ph += period;
+                    float x = ph / period; // 0..1
+                    float tri = 1.0f - std::abs(2.0f * x - 1.0f);
+                    float pulse = tri * tri * (3.0f - 2.0f * tri);
+                    pulse = std::pow(pulse, 1.15f);
+
+                    float triAlpha = 0.10f + 0.90f * pulse;
+                    if (triAlpha < 0.02f) {
+                        // effectively off (clean gap)
+                    } else {
+                        // 2. Signs (Red, Big & Transparent) — centered within the red danger band
                         std::string dMsg = "DANGER!";
                         float dScale = 2.8f; 
-                        float dW = dMsg.size() * 14.0f * dScale;
-                        float yPos = 75.0f; 
-                        float yMid = yPos + (10.0f * dScale); 
-                        
-                        m_renderer.drawUIText((float)fbW * 0.5f - dW * 0.5f, yPos, dMsg, dScale, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
-                        
+                        // Proper width calculation (Renderer::drawUIText uses 14*scale + 4*scale spacing)
+                        float labelW = 14.0f * dScale;
+                        float labelSpacing = 4.0f * dScale;
+                        float dW = dMsg.size() * labelW + (dMsg.size() - 1) * labelSpacing;
+                        float xPos = (float)fbW * 0.5f - dW * 0.5f;
+
+                        // Center vertically inside the danger band (y in UI coords is bottom-up)
+                        float screenY = (dangerLineScreenY >= 0.0f) ? dangerLineScreenY : (float)fbH * 0.30f;
+                        screenY = std::max(0.0f, std::min((float)fbH, screenY));
+                        float th = 20.0f * dScale;
+                        float yPos = std::max(12.0f, (screenY * 0.5f) - th * 0.5f);
+                        float yMid = yPos + th * 0.5f;
+
+                        // When paused, add a subtle glow (kept light so it still reads "clean")
+                        if (m_state.mode == GameMode::PAUSED) {
+                            glm::vec4 glow(1.0f, 0.0f, 0.0f, triAlpha * 0.14f);
+                            const float o = 2.0f;
+                            m_renderer.drawUIText(xPos - o, yPos, dMsg, dScale, glow);
+                            m_renderer.drawUIText(xPos + o, yPos, dMsg, dScale, glow);
+                            m_renderer.drawUIText(xPos, yPos - o, dMsg, dScale, glow);
+                            m_renderer.drawUIText(xPos, yPos + o, dMsg, dScale, glow);
+                        }
+
+                        // Main crisp text
+                        m_renderer.drawUIText(xPos, yPos, dMsg, dScale, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
+
                         auto drawTriangleSign = [&](float x) {
                             float triW = 100.0f; 
                             float triH = 85.0f;  
@@ -1031,8 +621,9 @@ void Game::render() {
                             m_renderer.drawUIQuad(x - 3, yTri + 16, 6, 6, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
                         };
 
-                        drawTriangleSign((float)fbW * 0.15f);
-                        drawTriangleSign((float)fbW * 0.85f);
+                        // Symmetric composition around center
+                        drawTriangleSign((float)fbW * 0.22f);
+                        drawTriangleSign((float)fbW * 0.78f);
                     }
                 }
             }
@@ -1075,6 +666,99 @@ void Game::render() {
                 float ty = startY + (boxSize - 16.0f) * 0.5f;
                 m_renderer.drawUIText(tx, ty, "/", 0.8f, glm::vec3(1, 1, 1));
             }
+        }
+    }
+
+    // Overlay (Pause / Game Over / Win) — draw LAST so it overlaps everything (danger, HUD, etc.)
+    if (m_state.mode != GameMode::PLAYING) {
+        float panelW = 450.0f;
+        float panelH = 200.0f;
+        float panelX = (fbW - panelW) * 0.5f;
+        float panelY = (fbH - panelH) * 0.5f;
+        
+        if (m_state.mode == GameMode::PAUSED) {
+            // Calculate panel and button positions
+            float panelW = 450.0f;
+            float panelH = 280.0f; // Taller to fit PAUSED text + buttons
+            float panelX = (fbW - panelW) * 0.5f;
+            float panelY = (fbH - panelH) * 0.5f;
+            
+            // Full screen masked overlay (dimmed outside, clear inside)
+            glm::vec2 maskMin(panelX, panelY);
+            glm::vec2 maskMax(panelX + panelW, panelY + panelH);
+            m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0, 0, 0, 0.82f), true, maskMin, maskMax);
+
+            // Panel background
+            m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.06f, 0.06f, 0.06f, 1.0f));
+            
+            // PAUSED text at the top
+            std::string msg = "PAUSED";
+            float scale = 3.0f; 
+            float charW = 14.0f * scale;
+            float charSpacing = 4.0f * scale;
+            float tw = msg.size() * charW + (msg.size() - 1) * charSpacing;
+            float th = 20.0f * scale;
+            
+            float tx = (fbW - tw) * 0.5f;
+            float ty = panelY + panelH - th - 40.0f;
+            m_renderer.drawUIText(tx, ty, msg, scale, glm::vec3(1, 1, 1));
+            
+            // Buttons (Restart and Menu)
+            float btnW = 140.0f;
+            float btnH = 60.0f;
+            float btnGap = 50.0f;
+            float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
+            float btnX_right = btnX_left + btnW + btnGap;
+            float btnY = panelY + 40.0f;
+            
+            m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+            m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
+            
+            std::string leftLabel = "RESTART";
+            std::string rightLabel = "MENU";
+            
+            float labelW = 14.0f;
+            float labelSpacing = 4.0f;
+            float ltw = leftLabel.size() * labelW + (leftLabel.size() - 1) * labelSpacing;
+            float rtw = rightLabel.size() * labelW + (rightLabel.size() - 1) * labelSpacing;
+            
+            m_renderer.drawUIText(btnX_left + (btnW - ltw) * 0.5f,  btnY + (btnH - 20.0f) * 0.5f, leftLabel, 1.0f, glm::vec3(1, 1, 1));
+            m_renderer.drawUIText(btnX_right + (btnW - rtw) * 0.5f, btnY + (btnH - 20.0f) * 0.5f, rightLabel, 1.0f, glm::vec3(1, 1, 1));
+        } else {
+            // Full screen masked overlay for Game Over / Win
+            glm::vec2 maskMin(panelX, panelY);
+            glm::vec2 maskMax(panelX + panelW, panelY + panelH);
+            m_renderer.drawUIQuad(0, 0, (float)fbW, (float)fbH, glm::vec4(0, 0, 0, 0.86f), true, maskMin, maskMax);
+
+            // Panel for Game Over / Win - Fully opaque
+            m_renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.08f, 1.0f));
+            
+            std::string title = (m_state.mode == GameMode::GAME_OVER) ? "GAME OVER" : "WINNER!";
+            float tw = title.size() * 20.0f + (title.size() - 1) * 6.0f;
+            float tx = panelX + (panelW - tw * 1.5f) * 0.5f;
+            m_renderer.drawUIText(tx, panelY + panelH - 60.0f, title, 1.5f, glm::vec3(1, 1, 1));
+
+            // Buttons
+            float btnW = 140.0f;
+            float btnH = 60.0f;
+            float btnGap = 50.0f;
+            float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
+            float btnX_right = btnX_left + btnW + btnGap;
+            float btnY = panelY + 40.0f;
+            
+            m_renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+            m_renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
+            
+            std::string leftLabel = "RETRY";
+            std::string rightLabel = "MENU";
+            
+            float labelW = 14.0f;
+            float labelSpacing = 4.0f;
+            float ltw = leftLabel.size() * labelW + (leftLabel.size() - 1) * labelSpacing;
+            float rtw = rightLabel.size() * labelW + (rightLabel.size() - 1) * labelSpacing;
+            
+            m_renderer.drawUIText(btnX_left + (btnW - ltw) * 0.5f,  btnY + (btnH - 20.0f) * 0.5f, leftLabel, 1.0f, glm::vec3(1, 1, 1));
+            m_renderer.drawUIText(btnX_right + (btnW - rtw) * 0.5f, btnY + (btnH - 20.0f) * 0.5f, rightLabel, 1.0f, glm::vec3(1, 1, 1));
         }
     }
 
