@@ -28,6 +28,12 @@ struct GameAssets {
     engine::Mesh extraBall;
     engine::Mesh slow;
     engine::Mesh extraLife;
+
+    // New powerups
+    engine::Mesh fireball;
+    engine::Mesh shield;
+    engine::Mesh skull; // reverse controls curse
+    engine::Mesh minus; // tiny paddle curse
     engine::Texture2D backgroundTexs[4];
 
     bool loadAll();
