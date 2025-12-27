@@ -90,10 +90,34 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 br.alive = false;
                 PowerUpSystem::spawnPowerUp(state, br.pos, cfg.powerUpChance);
                 
-                // Add score based on brick HP and wave
-                int baseScore = br.maxHp * 100;
-                int waveBonus = (state.gameType == GameType::ENDLESS) ? state.wave * 50 : 0;
-                state.score += baseScore + waveBonus;
+                // Points:
+                // - Bricks: higher HP (color) = more points
+                // - Endless: small wave bonus so later waves score higher
+                auto brickPoints = [&](int hp) -> int {
+                    // hp 1..6 (endless can go up to 6)
+                    switch (hp) {
+                        case 1: return 50;   // green
+                        case 2: return 120;  // yellow
+                        case 3: return 220;  // blue
+                        case 4: return 350;  // purple
+                        case 5: return 500;
+                        default: return 700; // 6+
+                    }
+                };
+
+                int baseScore = brickPoints(br.maxHp);
+                int waveBonus = (state.gameType == GameType::ENDLESS) ? (state.wave * 25) : 0;
+                int pts = baseScore + waveBonus;
+                if (state.gameType == GameType::ENDLESS) {
+                    // Endless: accumulate into a streak bank (committed later by Game::update)
+                    state.endlessStreakPoints += pts;
+                    state.endlessStreakIdleTimer = 0.0f;
+                    // If we were in the middle of "banking" animation, cancel it (fresh points came in)
+                    state.endlessStreakBanking = false;
+                    state.endlessStreakBankTimer = 0.0f;
+                } else {
+                    state.score += pts;
+                }
                 
                 // Count destroyed bricks for endless mode spawning
                 if (state.gameType == GameType::ENDLESS) {
