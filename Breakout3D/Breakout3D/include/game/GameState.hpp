@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include "game/entities/Brick.hpp"
+#include "game/entities/Ball.hpp"
+#include "game/entities/PowerUp.hpp" // includes PowerUpType enum
 
 namespace game {
 
@@ -18,24 +20,7 @@ enum class GameType {
     ENDLESS   // Endless mode: Infinite waves, no WIN state
 };
 
-enum class PowerUpType {
-    EXPAND,
-    EXTRA_BALL,
-    SLOW,
-    EXTRA_LIFE
-};
-
-struct Ball {
-    glm::vec3 pos = {0.0f, 0.0f, 0.0f};
-    glm::vec3 vel = {0.0f, 0.0f, 0.0f};
-    bool attached = false;
-};
-
-struct PowerUp {
-    PowerUpType type;
-    glm::vec3 pos = {0.0f, 0.0f, 0.0f};
-    bool alive = true;
-};
+// PowerUpType is now defined in game/entities/PowerUp.hpp
 
 struct GameState {
     GameMode mode = GameMode::MENU;
