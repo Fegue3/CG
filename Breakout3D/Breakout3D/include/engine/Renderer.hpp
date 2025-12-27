@@ -25,6 +25,8 @@ public:
     void drawUIText(float x, float y, const std::string& text, float scale, const glm::vec3& color) {
         drawUIText(x, y, text, scale, glm::vec4(color, 1.0f));
     }
+    float measureUITextWidth(const std::string& text, float scale = 1.0f) const;
+    float getUIFontLineHeight(float scale = 1.0f) const;
     void endUI();
     
     glm::mat4 getV() const { return m_V; }
@@ -44,6 +46,23 @@ private:
     float m_diffuseK = 1.00f;
     float m_specK    = 1.00f;
     float m_shininess = 32.0f;
+
+    // UI font (stb_truetype baked atlas)
+    GLuint m_uiFontTex = 0;
+    int m_uiFontTexW = 0;
+    int m_uiFontTexH = 0;
+    void* m_uiFontChars = nullptr; // stbtt_bakedchar[96] (kept opaque to avoid stb type leakage in headers)
+    // Bake at higher resolution for large titles; map old "scale" values via legacy height.
+    float m_uiFontPixelHeight = 96.0f;        // baked atlas pixel height (quality)
+    float m_uiFontLegacyPixelHeight = 20.0f;  // old baseline used by game/UI code (sizing)
+    float m_uiFontAscentPx = 0.0f;
+    float m_uiFontDescentPx = 0.0f;      // typically negative
+    float m_uiFontLineGapPx = 0.0f;
+
+    int m_uiFbW = 0;
+    int m_uiFbH = 0;
+
+    bool loadUIFont(const std::string& ttfPath);
 };
 
 } // namespace engine
