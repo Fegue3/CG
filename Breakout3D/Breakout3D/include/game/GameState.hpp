@@ -51,6 +51,27 @@ struct GameState {
     // Powerup Timers
     float expandTimer = 0.0f;
     float slowTimer = 0.0f;
+    float fireballTimer = 0.0f;
+    float shieldTimer = 0.0f;
+    float reverseTimer = 0.0f;
+    float tinyTimer = 0.0f;
+
+    struct FireballExplosionFx {
+        glm::vec3 pos = glm::vec3(0.0f);
+        float t = 0.0f; // seconds since spawn
+    };
+    std::vector<FireballExplosionFx> fireballExplosions;
+
+    // Score popups (used for negative penalties and positive instant awards like Fireball)
+    struct ScorePopup {
+        int pts = 0;      // can be negative
+        float t = 0.0f;   // seconds since spawn
+    };
+    std::vector<ScorePopup> scorePopups;
+
+    // When a one-shot fireball projectile is consumed, we respawn a normal ball
+    // without costing a life (so Fireball doesn't "eat" a heart).
+    bool pendingRespawnAfterFireball = false;
 
     // evita múltiplos hits por overlap
     float brickHitCooldown = 0.0f;
