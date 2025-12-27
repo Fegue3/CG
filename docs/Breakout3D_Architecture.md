@@ -6,59 +6,41 @@
 
 ---
 
-## 1. Estrutura de pastas e ficheiros
+## 1. Estrutura de pastas e ficheiros (IMPLEMENTADO)
 
 ```text
-Breakout3D/
+Breakout3D/Breakout3D/
   Makefile
 
   external/
-    glfw/
-    glad/
-    glm/
     stb_image.h
+    (glfw, glad, glm typically installed system-wide)
 
   assets/
     shaders/
-      basic_phong.vert
-      basic_phong.frag
-      ui_color.frag
     models/
-      paddle.obj
-      brick.obj
-      wall.obj
-      ball.obj
     textures/
-      paddle_diffuse.png
-      brick_diffuse.png
-      wall_diffuse.png
-      ball_diffuse.png
-    levels/
-      level01.txt
-      level02.txt
 
   include/
     engine/
       Window.hpp
       Input.hpp
       Time.hpp
-      Camera.hpp
       Shader.hpp
       Texture.hpp
       Mesh.hpp
       Renderer.hpp
-      ResourceManager.hpp
+    
     game/
       Game.hpp
       GameState.hpp
       GameConfig.hpp
-      InputMapping.hpp
+      GameAssets.hpp
 
       entities/
-        Paddle.hpp
         Ball.hpp
         Brick.hpp
-        Wall.hpp
+        Paddle.hpp
         PowerUp.hpp
 
       systems/
@@ -66,8 +48,7 @@ Breakout3D/
         InputSystem.hpp
         PhysicsSystem.hpp
         CollisionSystem.hpp
-        LevelSystem.hpp
-        GameStateSystem.hpp
+        PowerUpSystem.hpp
 
   src/
     main.cpp
@@ -76,33 +57,23 @@ Breakout3D/
       Window.cpp
       Input.cpp
       Time.cpp
-      Camera.cpp
       Shader.cpp
       Texture.cpp
       Mesh.cpp
       Renderer.cpp
-      ResourceManager.cpp
 
     game/
       Game.cpp
       GameState.cpp
       GameConfig.cpp
-      InputMapping.cpp
-
-      entities/
-        Paddle.cpp
-        Ball.cpp
-        Brick.cpp
-        Wall.cpp
-        PowerUp.cpp
+      GameAssets.cpp
 
       systems/
         InitSystem.cpp
         InputSystem.cpp
         PhysicsSystem.cpp
         CollisionSystem.cpp
-        LevelSystem.cpp
-        GameStateSystem.cpp
+        PowerUpSystem.cpp
 ```
 
 ### Ideia principal
@@ -110,6 +81,7 @@ Breakout3D/
 - Tudo o que é **OpenGL, janela, assets genéricos** vive em `engine/`.
 - Tudo o que é **Breakout (regras, entidades, níveis)** vive em `game/`.
 - `main.cpp` é o **maestro** que cria engine + jogo e corre o loop.
+- **Sistemas** separam a lógica do jogo em módulos independentes e testáveis.
 
 ---
 
@@ -120,6 +92,7 @@ Regra de ouro:
 - `engine/` **NÃO** conhece `game/`.
 - `game/` **PODE** usar tipos da engine (ex: tempo, input bruto, interface de renderer).
 - `main.cpp` junta as duas coisas.
+- **Sistemas** dentro de `game/` são independentes uns dos outros (quando possível).
 
 Diagrama simplificado:
 
@@ -129,6 +102,9 @@ external (GLFW, GLAD, GLM, stb)
       engine/
         ↓
        game/
+        ├── systems/  (lógica modular)
+        ├── entities/ (estruturas de dados)
+        └── Game.cpp  (orquestrador)
         ↓
      main.cpp
 ```
@@ -144,12 +120,13 @@ Isto garante que a engine é reutilizável noutros projetos.
 **`Window.hpp` / `Window.cpp`**
 
 Responsável por:
-
 - Criar e destruir a janela + contexto OpenGL (GLFW).
 - `create(width, height, title)`
 - `shouldClose()`
 - `pollEvents()`
-- `getSize()`
+- `getFramebufferSize()`
+- `swapBuffers()`
+- `requestClose()`
 
 Não sabe nada sobre o jogo, só janela e eventos.
 
@@ -160,16 +137,15 @@ Não sabe nada sobre o jogo, só janela e eventos.
 **`Input.hpp` / `Input.cpp`**
 
 Responsável por:
-
 - Ler **teclas/rato** diretamente da GLFW.
 - Guardar o estado de cada tecla/botão.
 - Funções do tipo:
-  - `isKeyDown(key)`
-  - `isKeyPressed(key)` (edge)
-  - `getMousePos()`
+  - `keyDown(key)` / `keyPressed(key)` (edge detection)
+  - `mousePosFbPx()` - posição do mouse
+  - `mousePressed(button)`
 
-Aqui as teclas ainda são “W, A, S, D, Espaço…”, não “moveLeft” ou “launchBall”.  
-A conversão para ações de jogo é feita em `game/InputMapping`.
+Aqui as teclas ainda são "A, D, Space, Escape...", não "moveLeft" ou "launchBall".  
+A conversão para ações de jogo é feita em `game/systems/InputSystem`.
 
 ---
 
@@ -178,39 +154,18 @@ A conversão para ações de jogo é feita em `game/InputMapping`.
 **`Time.hpp` / `Time.cpp`**
 
 Responsável por:
-
 - Gerir tempo do jogo:
-  - `float getDeltaTime()`
-  - `float getTime()`
-- Atualizado uma vez por frame no `main.cpp`.
+  - `delta()` - tempo desde o último frame
+  - `now()` - tempo absoluto desde o início
+- Atualizado uma vez por frame no `main.cpp` via `tick()`.
 
 ---
 
-### 3.4. Camera
-
-**`Camera.hpp` / `Camera.cpp`**
-
-Responsável por:
-
-- Guardar:
-  - posição
-  - target
-  - up
-  - fov / near / far
-- Gerar:
-  - `glm::mat4 getViewMatrix()`
-  - `glm::mat4 getProjectionMatrix(aspectRatio)`
-
-A lógica de onde a câmara deve olhar (paddle, centro do campo, etc.) pode ser controlada pelo jogo, mas o cálculo de matrizes vive aqui.
-
----
-
-### 3.5. Shader
+### 3.4. Shader
 
 **`Shader.hpp` / `Shader.cpp`**
 
 Wrapper para programas OpenGL:
-
 - Carrega de `assets/shaders/*.vert` / `*.frag`.
 - Compila e faz link.
 - Tem helpers:
@@ -222,72 +177,52 @@ Wrapper para programas OpenGL:
 
 ---
 
-### 3.6. Texture
+### 3.5. Texture
 
 **`Texture.hpp` / `Texture.cpp`**
 
 Responsável por:
-
 - Carregar texturas de `assets/textures/` usando `stb_image.h`.
 - Criar textura OpenGL (glTexImage2D, etc.).
 - Fazer bind/unbind.
+- Guardar `id` da textura OpenGL.
 
 ---
 
-### 3.7. Mesh
+### 3.6. Mesh
 
 **`Mesh.hpp` / `Mesh.cpp`**
 
 Responsável por:
-
 - Guardar geometria (VAO, VBO, EBO).
-- Gerar formas básicas:
-  - cubo, esfera, plano…
-- Carregar `.obj` simples de `assets/models/`.
+- Carregar `.obj` simples de `assets/models/`, incluindo suporte para materiais (`.mtl`).
+- Métodos para desenhar a mesh.
 
-Não sabe nada de “bricks” ou “paddles”; só sabe que desenha uma mesh.
-
----
-
-### 3.8. ResourceManager
-
-**`ResourceManager.hpp` / `ResourceManager.cpp`**
-
-Responsável por:
-
-- Ser um “repositório” de:
-  - shaders
-  - meshes
-  - textures
-- Interface típica:
-  - `loadShader(name, vertPath, fragPath)`
-  - `getShader(name)`
-  - `loadTexture(name, path)`
-  - `getTexture(name)`
-  - `createMeshCube(name)`
-  - `getMesh(name)`
-
-É aqui que o `Renderer` vai buscar recursos para desenhar.
+Não sabe nada de "bricks" ou "paddles"; só sabe que desenha uma mesh.
 
 ---
 
-### 3.9. Renderer
+### 3.7. Renderer
 
 **`Renderer.hpp` / `Renderer.cpp`**
 
 Responsável por:
-
 - Configurar estado global de OpenGL:
   - depth test, culling, clear color…
 - Iniciar frame:
-  - `beginFrame()` → `glClear(...)`
+  - `beginFrame(width, height)` → `glClear(...)`
 - Terminar frame:
-  - `endFrame()` → `swap buffers`
+  - `endFrame()` → prepara para swap buffers
 - Fornecer funções de desenho de alto nível:
-  - `drawMesh(mesh, transform, materialInfo)`
-- Opcional: definir uma interface `IRenderer` que o jogo pode usar sem conhecer OpenGL diretamente.
+  - `drawMesh(mesh, position, scale, tint)` - desenha mesh 3D
+  - `drawMesh(mesh, modelMatrix, tint)` - desenha com matriz custom
+  - `beginUI(width, height)` - inicia modo UI (ortho)
+  - `drawUIQuad(...)` - desenha quad UI
+  - `drawUIText(...)` - desenha texto UI
+  - `drawBackground(textureId)` - desenha background
+  - `setCamera(view, projection, position)` - define câmera 3D
 
-O `Renderer` **não sabe** o que é “score”, “vidas” ou “GameState”.  
+O `Renderer` **não sabe** o que é "score", "vidas" ou "GameState".  
 Só recebe transformações (modelMatrix) e info de material.
 
 ---
@@ -299,12 +234,10 @@ Só recebe transformações (modelMatrix) e info de material.
 **`GameConfig.hpp` / `GameConfig.cpp`**
 
 Responsável por guardar as **regras do jogo**:
-
 - Velocidades (paddle, bola).
-- Número de vidas.
-- Limites da arena (minX, maxX, etc.).
-- Pontuação por tipo de brick.
-- Parâmetros de física (bónus, atrito, etc.).
+- Limites da arena (minX, maxX, minZ, maxZ).
+- Tamanhos (paddleSize, ballRadius).
+- Parâmetros de power-ups (chance, duração, velocidades).
 
 Serve de referência para os sistemas.
 
@@ -316,40 +249,32 @@ Serve de referência para os sistemas.
 
 Responsável por guardar o **estado mutável** do jogo:
 
-- `enum class GameMode { MENU, PLAYING, PAUSED, LEVEL_COMPLETE, GAME_OVER };`
+- `enum class GameMode { MENU, PLAYING, PAUSED, GAME_OVER, WIN };`
+- `enum class GameType { NORMAL, ENDLESS };`
 - `GameMode mode;`
 - `int score;`
 - `int lives;`
-- `int currentLevel;`
-- `float timeSinceLevelStart;`
-- Entidades:
-  - `Paddle paddle;`
-  - `Ball ball;`
+- `int wave;` (para endless mode)
+- `glm::vec3 paddlePos;`
+- `std::vector<Ball> balls;`
   - `std::vector<Brick> bricks;`
-  - `std::vector<Wall> walls;`
-  - `std::vector<PowerUp> powerUps;` (opcional)
+- `std::vector<PowerUp> powerups;`
+- Timers (expandTimer, slowTimer, brickHitCooldown, etc.)
+- UI state (cameraMode, currentBg, showInstructions, etc.)
 
-É o “snapshot” completo do mundo numa frame.
+É o "snapshot" completo do mundo numa frame.
 
 ---
 
-### 4.3. InputMapping
+### 4.3. GameAssets
 
-**`InputMapping.hpp` / `InputMapping.cpp`**
+**`GameAssets.hpp` / `GameAssets.cpp`**
 
-Responsável por converter input bruto da engine para ações de jogo.
-
-- Define `struct GameInput`:
-  - `bool moveLeft;`
-  - `bool moveRight;`
-  - `bool launch;`
-  - `bool pause;`
-  - `bool restart;`
-  - `bool nextLevel;`
-- Função:
-  - `GameInput mapInput(const engine::Input& rawInput);`
-
-Separar isto ajuda a mudar controlos sem tocar na lógica do jogo.
+Responsável por:
+- Carregar todos os modelos (meshes) e texturas do jogo.
+- Armazenar referências para meshes de bricks, paddle, ball, power-ups, etc.
+- `loadAll()` - carrega todos os assets
+- `destroy()` - liberta recursos
 
 ---
 
@@ -360,79 +285,83 @@ Separar isto ajuda a mudar controlos sem tocar na lógica do jogo.
 Classe principal da camada de jogo:
 
 - Guarda:
-  - `GameState state;`
-  - `GameConfig config;`
-  - `GameInput currentInput;`
+  - `GameState m_state;`
+  - `GameConfig m_cfg;`
   - referências para:
-    - `engine::Renderer`
-    - `engine::Input`
+    - `engine::Window`
     - `engine::Time`
+    - `engine::Renderer`
+    - `GameAssets`
 - Métodos públicos:
-  - `void init();`
-  - `void update();`
-  - `void render();`
+  - `init()` - inicializa o jogo
+  - `update(const engine::Input& input)` - atualiza lógica do jogo
+  - `render()` - desenha o jogo
 
-Internamente, `Game` usa os “sistemas” para fazer o trabalho: InitSystem, InputSystem, PhysicsSystem, etc.
+**Internamente, `Game` delega para os sistemas:**
+- `InitSystem::initGame()` - inicialização
+- `InputSystem::handleMenuInput()` / `handleGameInput()` - input
+- `PhysicsSystem::updatePaddle()` / `updateBalls()` - física
+- `CollisionSystem::handleWorldCollisions()` / `handlePaddleCollision()` / `handleBrickCollisions()` - colisões
+- `PowerUpSystem::updatePowerUps()` - power-ups
 
 ---
 
 ### 4.5. Entidades (`game/entities/`)
 
 Cada ficheiro representa um tipo de objeto no mundo.  
-São basicamente estruturas de dados + helpers; não têm lógica pesada.
-
-#### Paddle
-
-**`Paddle.hpp` / `Paddle.cpp`**
-
-- posição, tamanho, velocidade
-- maxSpeed, etc.
+São basicamente **estruturas de dados**; não têm lógica pesada (toda a lógica está nos sistemas).
 
 #### Ball
 
-**`Ball.hpp` / `Ball.cpp`**
+**`Ball.hpp`** (header-only)
 
-- posição, velocidade, raio
-- `bool attachedToPaddle`
+- `glm::vec3 pos` - posição
+- `glm::vec3 vel` - velocidade
+- `bool attached` - se está presa ao paddle
 
 #### Brick
 
-**`Brick.hpp` / `Brick.cpp`**
+**`Brick.hpp`** (header-only)
 
-- posição, tamanho, hitPoints
-- `int scoreValue`
-- tipo (normal, duro, indestrutível, powerup)
+- `glm::vec3 pos` - posição
+- `glm::vec3 size` - tamanho
+- `bool alive` - se está vivo
+- `int hp` - pontos de vida atuais
+- `int maxHp` - pontos de vida máximos (1-6)
 
-#### Wall
+#### Paddle
 
-**`Wall.hpp` / `Wall.cpp`**
+**`Paddle.hpp`** (header-only)
 
-- posição, tamanho
-- tipo (left, right, top, back, floor)
+- `glm::vec3 pos` - posição
+- (tamanho e velocidade vêm de `GameConfig`)
 
-#### PowerUp (opcional)
+#### PowerUp
 
-**`PowerUp.hpp` / `PowerUp.cpp`**
+**`PowerUp.hpp`** (header-only)
 
-- tipo (extra life, bigger paddle, etc.)
-- duração
-- posição, velocidade (a cair)
+- `PowerUpType type` - tipo (EXPAND, EXTRA_BALL, SLOW, EXTRA_LIFE)
+- `glm::vec3 pos` - posição
+- `bool alive` - se está ativo
+- `enum class PowerUpType` - definido aqui
 
 ---
 
 ### 4.6. Sistemas (`game/systems/`)
 
-Cada sistema tem uma responsabilidade clara e mexe em partes do `GameState`.
+Cada sistema tem uma **responsabilidade clara** e mexe em partes do `GameState`.  
+Todos os métodos são **estáticos** - não mantêm estado próprio.
 
 #### InitSystem
 
 **`InitSystem.hpp` / `InitSystem.cpp`**
 
 Responsável por:
-
-- `void initGame(GameState& state, const GameConfig& config);`
-- `void loadLevel(GameState& state, int levelIndex);`
-- `void resetBallAndPaddle(GameState& state, const GameConfig& config);`
+- `initGame(GameState& state, const GameConfig& cfg)` - inicializa jogo completo
+- `generateBricks(GameState& state, const GameConfig& cfg, int waveNumber)` - gera bricks
+- `spawnIncrementalBricks(...)` - spawna bricks adicionais (endless mode)
+- `resetBallAndPaddle(...)` - reseta bola e paddle
+- `anyBricksAlive(const GameState& state)` - verifica se há bricks vivos
 
 Cuida da criação inicial do mundo e reset após perda de vida.
 
@@ -443,23 +372,14 @@ Cuida da criação inicial do mundo e reset após perda de vida.
 **`InputSystem.hpp` / `InputSystem.cpp`**
 
 Responsável por:
-
-- `void handleInput(GameState& state, const GameConfig& config, const GameInput& input, float dt);`
+- `handleMenuInput(GameState& state, const engine::Input& input, engine::Window& window)` - processa input do menu
+- `handleGameInput(GameState& state, const engine::Input& input, const GameConfig& cfg, engine::Window& window, float dt)` - processa input do jogo
 
 Funções:
-
-- Em `MENU`:
-  - start → `mode = PLAYING`.
-- Em `PLAYING`:
-  - move paddle com base em `moveLeft`/`moveRight`.
-  - se bola presa e `launch` → soltar bola.
-  - `pause` → `mode = PAUSED`.
-- Em `PAUSED`:
-  - `pause` → voltar a `PLAYING`.
-- Em `GAME_OVER`:
-  - `restart` → `InitSystem::initGame(...)`.
-- Em `LEVEL_COMPLETE`:
-  - `nextLevel` → `loadLevel(...)`.
+- Em `MENU`: detecta cliques nos botões, muda modo, fecha jogo
+- Em `PLAYING`: move paddle, lança bola, pausa, muda câmera, seleciona background
+- Em `PAUSED`: resume jogo
+- Em `GAME_OVER`/`WIN`: botões de restart/menu
 
 ---
 
@@ -468,19 +388,15 @@ Funções:
 **`PhysicsSystem.hpp` / `PhysicsSystem.cpp`**
 
 Responsável por:
-
-- `void updatePhysics(GameState& state, float dt);`
+- `updatePaddle(GameState& state, const GameConfig& cfg, float dir, float dt)` - atualiza posição do paddle
+- `updateBalls(GameState& state, const GameConfig& cfg, float dt)` - atualiza posições das bolas
+- `resetBallToPaddle(Ball& ball, const glm::vec3& paddlePos, const GameConfig& cfg)` - reseta bola para paddle
 
 Tarefas:
-
-- Atualizar posição de:
-  - bola
-  - paddle
-  - powerups
-- Aplicar:
-  - clamps (paddle não sai do campo)
-  - limites de velocidade (se quiseres)
-- NÃO trata colisões; só integração.
+- Atualizar posição de bolas (movimento baseado em velocidade)
+- Aplicar clamps (paddle não sai do campo)
+- Remover bolas que saíram do campo
+- **NÃO trata colisões**; só integração de física.
 
 ---
 
@@ -488,50 +404,37 @@ Tarefas:
 
 **`CollisionSystem.hpp` / `CollisionSystem.cpp`**
 
-Responsável por TODAS as colisões:
+Responsável por **TODAS as colisões**:
 
-- `void handleWorldCollisions(GameState& state, const GameConfig& config);`
-  - bola vs paredes / fundo → reflete direção, marca perda de vida.
-- `void handlePaddleCollision(GameState& state, const GameConfig& config);`
-  - bola vs paddle → muda direção com base no ponto de impacto.
-- `void handleBrickCollisions(GameState& state, const GameConfig& config);`
-  - bola vs bricks → reflete velocidade, remove/atualiza bricks, aumenta score.
-- `void handlePowerUpCollisions(GameState& state, const GameConfig& config);`
-  - powerups vs paddle → aplicar efeitos.
+- `handleWorldCollisions(Ball& ball, const GameConfig& cfg)` - colisões com paredes
+  - bola vs paredes (MinX, MaxX, MinZ) → reflete direção
+- `handlePaddleCollision(Ball& ball, const glm::vec3& paddlePos, const glm::vec3& paddleSize, const GameConfig& cfg)` - colisão com paddle
+  - bola vs paddle → muda direção com base no ponto de impacto
+  - calcula ângulo de reflexão baseado na posição do impacto
+- `handleBrickCollisions(Ball& ball, GameState& state, const GameConfig& cfg)` - colisões com bricks
+  - bola vs bricks → reflete velocidade, remove/atualiza bricks, aumenta score
+  - spawna power-ups quando brick é destruído
+  - atualiza contadores para endless mode
 
-Aqui vive a matemática de colisão (esfera–AABB, etc.).
+Aqui vive a matemática de colisão (esfera–AABB em XZ, etc.).
 
 ---
 
-#### LevelSystem
+#### PowerUpSystem
 
-**`LevelSystem.hpp` / `LevelSystem.cpp`**
+**`PowerUpSystem.hpp` / `PowerUpSystem.cpp`**
 
 Responsável por:
-
-- `bool isLevelCleared(const GameState& state);`
-- `void advanceLevel(GameState& state, const GameConfig& config);`
-
-Decide quando todos os bricks importantes acabaram e chama `InitSystem::loadLevel` para o próximo nível.
-
----
-
-#### GameStateSystem
-
-**`GameStateSystem.hpp` / `GameStateSystem.cpp`**
-
-Responsável por regras globais:
-
-- `void updateGameState(GameState& state, const GameConfig& config);`
-
-Tarefas típicas:
-
-- Se perdeu vida:
-  - reduzir `lives`.
-  - se `lives > 0` → reset ball+paddle.
-  - senão → `mode = GAME_OVER`.
-- Se nível completo:
-  - `mode = LEVEL_COMPLETE`.
+- `spawnPowerUp(GameState& state, const glm::vec3& pos, float chance)` - spawna power-up aleatório
+- `updatePowerUps(GameState& state, const GameConfig& cfg, float dt)` - atualiza power-ups
+  - move power-ups para baixo (física)
+  - detecta colisão com paddle
+  - aplica efeitos quando coletado
+- `applyPowerUpEffect(GameState& state, const GameConfig& cfg, PowerUpType type)` - aplica efeito do power-up
+  - EXTRA_LIFE: adiciona vida
+  - EXTRA_BALL: spawna 3 novas bolas
+  - SLOW: ativa slow timer
+  - EXPAND: ativa expand timer
 
 ---
 
@@ -544,56 +447,71 @@ Tarefas típicas:
    - `Input input;`
    - `Time time;`
    - `Renderer renderer;`
-   - `ResourceManager resources;`
+   - `GameAssets assets;`
 2. Inicializa:
-   - `window.create(...)`
-   - `renderer.init(...)`
+   - `window.create(1280, 720, "Breakout3D")`
+   - `renderer.init()`
+   - `assets.loadAll()`
 3. Cria o jogo:
-   - `Game game(renderer, input, time);`
-   - `game.init();`
+   - `Game game(window, time, renderer, assets);`
+   - (não chama `init()` - jogo começa em MENU)
 4. Loop principal:
 
 ```cpp
 while (!window.shouldClose()) {
-    time.updateDelta();
+    time.tick();
     window.pollEvents();
 
-    game.update();   // lógica do jogo (sistemas)
-    game.render();   // pede ao renderer para desenhar o GameState atual
+    input.update(window);
+    game.update(input);   // lógica do jogo (sistemas)
+    game.render();        // pede ao renderer para desenhar
 }
 ```
 
-5. Cleanup e sair.
+5. Cleanup e sair:
+   - `assets.destroy()`
+   - `renderer.shutdown()`
+   - `window.destroy()`
 
 ---
 
 ## 6. Fluxo por frame (visão de alto nível)
 
-1. **Engine**
-   - atualiza tempo (`deltaTime`)
-   - lê input bruto (teclas/rato)
-2. **Game**
-   - mapeia input → `GameInput`
-   - `InputSystem` → atualiza intenções (mover paddle, lançar bola, pausar)
-   - `PhysicsSystem` → move entidades
-   - `CollisionSystem` → resolve colisões (bola/paddle/bricks/paredes)
-   - `LevelSystem` / `GameStateSystem` → vidas, score, avanço de nível
-3. **Renderer**
-   - recebe o `GameState`
-   - desenha:
-     - paredes / chão
-     - paddle
-     - bola
-     - bricks
-     - powerups (se houver)
-     - HUD (vidas, score)
+1. **Engine** (no `main.cpp`)
+   - atualiza tempo (`time.tick()`)
+   - lê input bruto (`input.update(window)`)
+
+2. **Game::update()**
+   - Se `MENU`: `InputSystem::handleMenuInput()` → processa cliques
+   - Se `PLAYING`:
+     - `InputSystem::handleGameInput()` → move paddle, lança bola, pausa
+     - Atualiza timers (power-ups, cooldowns)
+     - `PhysicsSystem::updateBalls()` → move bolas
+     - Para cada bola:
+       - `CollisionSystem::handleWorldCollisions()` → colisões com paredes
+       - `CollisionSystem::handlePaddleCollision()` → colisão com paddle
+       - `CollisionSystem::handleBrickCollisions()` → colisões com bricks
+     - `PowerUpSystem::updatePowerUps()` → atualiza power-ups
+     - Verifica condições de win/loss
+     - Spawna novos bricks (endless mode)
+
+3. **Game::render()**
+   - Se `MENU`: desenha menu UI
+   - Se `PLAYING`:
+     - Define câmera (modo 1 ou 2)
+     - Desenha paredes, bricks, paddle, bolas, power-ups (3D pass)
+     - Desenha HUD (vidas, score, wave) (UI pass)
+     - Desenha overlays (pause, game over, win)
+
+4. **Engine** (no `main.cpp`)
+   - `window.swapBuffers()` → apresenta frame
 
 ---
 
 ## 7. Benefícios desta arquitetura
 
 - **Escalabilidade**  
-  Podes adicionar features (powerups, mais níveis, modos de jogo) mexendo apenas em `game/`.
+  Podes adicionar features (powerups, mais níveis, modos de jogo) mexendo apenas nos sistemas relevantes.
 
 - **Performance**  
   Otimizações gráficas ficam em `engine/Renderer`, sem tocar na lógica.
@@ -602,6 +520,7 @@ while (!window.shouldClose()) {
   Qualquer pessoa que abra o projeto:
   - sabe que `engine/` é infra genérica,
   - `game/` é só Breakout,
+  - `systems/` contém lógica modular,
   - `main.cpp` é o ponto de entrada.
 
 - **Clareza**  
@@ -609,10 +528,35 @@ while (!window.shouldClose()) {
   - *Window* – janela e contexto
   - *Input* – leitura de teclas/rato
   - *GameState* – dados do mundo
-  - *Systems* – regras específicas por área (input, física, colisões…)
-  - *Renderer* – desenhar, nada mais.
+  - *Systems* – regras específicas por área (input, física, colisões, power-ups)
+  - *Renderer* – desenhar, nada mais
+
+- **Testabilidade**  
+  Sistemas podem ser testados independentemente, pois são funções estáticas que recebem estado.
+
+- **Redução de Complexidade**  
+  `Game.cpp` reduziu de **1085 linhas** para **~176 linhas**, delegando para sistemas especializados.
 
 ---
 
-Este ficheiro serve como referência para implementares aos poucos.  
-Podes começar com uma versão reduzida (sem PowerUp, sem LevelSystem separado) e ir aproximando-te deste “final product” à medida que o projeto cresce.
+## 8. Status da Implementação
+
+### ✅ Implementado
+
+- **Engine Layer**: Completo (Window, Input, Time, Shader, Texture, Mesh, Renderer)
+- **Entities**: Ball, Brick, Paddle, PowerUp
+- **Systems**: InitSystem, InputSystem, PhysicsSystem, CollisionSystem, PowerUpSystem
+- **Game**: GameState, GameConfig, GameAssets, Game (orquestrador)
+
+### 🚧 Não Implementado (mas planeado)
+
+- **InputMapping**: Abstração de input (atualmente InputSystem faz isso diretamente)
+- **LevelSystem**: Sistema dedicado para progressão de níveis/waves
+- **GameStateSystem**: Sistema para regras globais de estado (vidas, win/loss)
+- **Camera** (como classe separada): Atualmente calculada diretamente no render
+
+Estes podem ser adicionados futuramente conforme necessário.
+
+---
+
+Este ficheiro documenta a arquitetura **atualmente implementada** do projeto.
