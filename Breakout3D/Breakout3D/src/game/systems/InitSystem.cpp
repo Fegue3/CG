@@ -5,8 +5,35 @@
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
+#include <fstream>
+#include <string>
 
 namespace game {
+
+// Weighted base HP selection for "random" bricks:
+// 1=green (most common) -> 2=yellow -> 3=blue -> 4=purple (rarest)
+static int pickWeightedBaseHp_1to4() {
+    int r = rand() % 100;
+    if (r < 30) return 1;      // 30%  (green)
+    if (r < 55) return 2;      // 25%  (yellow)
+    if (r < 80) return 3;      // 25%  (blue)
+    return 4;                  // 20%  (purple)
+}
+
+static std::string endlessBestScorePath() {
+    const char* home = std::getenv("HOME");
+    if (home && *home) {
+        return std::string(home) + "/.breakout3d_endless_best.txt";
+    }
+    return "breakout3d_endless_best.txt";
+}
+
+static int loadEndlessBestScore() {
+    std::ifstream f(endlessBestScorePath());
+    int best = 0;
+    if (f >> best) return std::max(0, best);
+    return 0;
+}
 
 bool InitSystem::anyBricksAlive(const GameState& state) {
     for (const auto& b : state.bricks) {
@@ -34,6 +61,11 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.bricksDestroyedThisWave = 0;
     state.endlessRowsSpawned = 0;
     state.score = 0;
+    state.endlessBestScore = loadEndlessBestScore();
+    state.endlessStreakPoints = 0;
+    state.endlessStreakIdleTimer = 0.0f;
+    state.endlessStreakBanking = false;
+    state.endlessStreakBankTimer = 0.0f;
     state.endlessDangerActive = false;
     state.endlessDangerTimer = 0.0f;
     
@@ -91,6 +123,23 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
             b.pos.y = 0.0f;
             b.pos.z = startZ + r * (brickSize.z + gapZ);
 
+            // Normal mode: single preset level (from closest-to-paddle -> farthest)
+            // 3 rows green (1 HP), then 2 rows yellow (2 HP),
+            // then 2 rows blue (3 HP), then 2 rows purple (4 HP).
+            if (waveNumber == 0) {
+                int hp = 1;
+                // NOTE: r grows towards the paddle (increasing Z).
+                // So the "first" rows the player sees (near the paddle) are the highest r.
+                if (r >= 6) hp = 1;         // green (3 rows closest)
+                else if (r >= 4) hp = 2;    // yellow (next 2 rows)
+                else if (r >= 2) hp = 3;    // blue (next 2 rows)
+                else hp = 4;                // purple (2 rows farthest)
+
+                b.maxHp = b.hp = hp;
+                state.bricks.push_back(b);
+                continue;
+            }
+
             // Split wall into Front (closer to paddle) and Back (further away)
             bool isFrontHalf = (r >= rows / 2);
 
@@ -103,10 +152,10 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
             } else {
                 // Back half: Random bricks
                 if (waveNumber == 0) {
-                    b.maxHp = b.hp = 1 + (rand() % 4);
+                    b.maxHp = b.hp = pickWeightedBaseHp_1to4();
                 } else {
                     int hpBonus = waveNumber / 5;
-                    int baseHp = 1 + (rand() % 4);
+                    int baseHp = pickWeightedBaseHp_1to4();
                     b.maxHp = b.hp = std::min(6, baseHp + hpBonus);
                 }
             }
@@ -150,7 +199,7 @@ void InitSystem::spawnIncrementalBricks(GameState& state, const GameConfig& cfg,
         b.pos.y = 0.0f;
         b.pos.z = topZ + rowLocal * stepZ;
 
-        int baseHp = 1 + (rand() % 4);
+        int baseHp = pickWeightedBaseHp_1to4();
         int difficultyBonus = (rowGlobal / 20);
         b.maxHp = b.hp = std::min(6, baseHp + difficultyBonus);
 
