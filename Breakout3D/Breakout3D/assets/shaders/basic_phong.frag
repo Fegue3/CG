@@ -11,36 +11,44 @@ uniform vec3 uAlbedo;
 uniform int uUseTex;
 uniform sampler2D uTex;
 
-// ✅ novos controlos (para UI vs 3D)
-uniform float uAmbientK;   // ex: 0.15 no mundo, 0.28 no HUD
-uniform float uDiffuseK;   // ex: 1.00 no mundo, 0.35 no HUD
-uniform float uSpecK;      // ex: 1.00 no mundo, 0.08 no HUD
+// UI vs 3D controls
+uniform float uAmbientK;
+uniform float uDiffuseK;
+uniform float uSpecK;
 uniform float uShininess;
-uniform float uAlpha = 1.0;
-uniform int   uUseMask = 0;
+
+// não confiar em defaults no shader: o CPU deve setar sempre
+uniform float uAlpha;
+uniform int   uUseMask;
 uniform vec2  uMaskMin;
 uniform vec2  uMaskMax;
 
 out vec4 FragColor;
 
 void main() {
-    vec3 N = normalize(vNormal);
-    vec3 L = normalize(uLightPos - vWorldPos);
-    vec3 V = normalize(uViewPos - vWorldPos);
-
     vec3 base = uAlbedo;
     if (uUseTex == 1) {
         base *= texture(uTex, vUV).rgb;
     }
 
-    vec3 ambient = uAmbientK * base;
+    // Ambient serve para UI/background sem luz
+    vec3 color = uAmbientK * base;
 
-    float diff = max(dot(N, L), 0.0);
-    vec3 diffuse = (uDiffuseK * diff) * base * uLightColor;
+    // Só calcula lighting se for mesmo necessário (evita NaNs na UI)
+    if (uDiffuseK > 0.0001 || uSpecK > 0.0001) {
+        vec3 N = normalize(vNormal);
+        vec3 L = normalize(uLightPos - vWorldPos);
+        vec3 V = normalize(uViewPos - vWorldPos);
 
-    vec3 R = reflect(-L, N);
-    float spec = pow(max(dot(V, R), 0.0), uShininess);
-    vec3 specular = (uSpecK * spec) * uLightColor;
+        float diff = max(dot(N, L), 0.0);
+        color += (uDiffuseK * diff) * base * uLightColor;
+
+        if (uSpecK > 0.0001) {
+            vec3 R = reflect(-L, N);
+            float spec = pow(max(dot(V, R), 0.0), uShininess);
+            color += (uSpecK * spec) * uLightColor;
+        }
+    }
 
     float alpha = uAlpha;
     if (uUseMask == 1) {
@@ -50,5 +58,5 @@ void main() {
         }
     }
 
-    FragColor = vec4(ambient + diffuse + specular, alpha);
+    FragColor = vec4(color, alpha);
 }
