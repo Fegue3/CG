@@ -21,8 +21,16 @@ public:
     // UI pass (HUD 3D em ortho)
     void beginUI(int fbW, int fbH);
     void drawUIQuad(float x, float y, float w, float h, const glm::vec4& color, bool useMask = false, glm::vec2 maskMin = glm::vec2(0.0f), glm::vec2 maskMax = glm::vec2(0.0f));
-    void drawUIText(float x, float y, const std::string& text, float scale = 1.0f, const glm::vec3& color = glm::vec3(1.0f));
+    void drawUIText(float x, float y, const std::string& text, float scale = 1.0f, const glm::vec4& color = glm::vec4(1.0f));
+    void drawUIText(float x, float y, const std::string& text, float scale, const glm::vec3& color) {
+        drawUIText(x, y, text, scale, glm::vec4(color, 1.0f));
+    }
     void endUI();
+    
+    glm::mat4 getV() const { return m_V; }
+    glm::mat4 getP() const { return m_P; }
+    
+    void drawUITriangle(const glm::vec2& p0, const glm::vec2& p1, const glm::vec2& p2, const glm::vec4& color);
 
 private:
     Shader m_shader;
