@@ -1,6 +1,7 @@
 #include "game/systems/PowerUpSystem.hpp"
 #include "game/entities/Ball.hpp"
 #include "game/entities/PowerUp.hpp"
+#include "game/systems/PhysicsSystem.hpp"
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
@@ -16,11 +17,18 @@ void PowerUpSystem::spawnPowerUp(GameState& state, const glm::vec3& pos, float c
     p.pos.y = 0.4f; // Lift slightly off the ground initially
 
     int r2 = rand() % 100;
-    // Make EXTRA_BALL the most common drop (player request).
-    if (r2 < 45)       p.type = PowerUpType::EXTRA_BALL; // 45%
-    else if (r2 < 65)  p.type = PowerUpType::EXPAND;     // 20%
-    else if (r2 < 82)  p.type = PowerUpType::SLOW;       // 17%
-    else               p.type = PowerUpType::EXTRA_LIFE; // 18%
+    // Weighted distribution (feel free to tune):
+    // - Good: extra ball, expand, shield, fireball, extra life
+    // - Bad/curses: reverse, tiny
+    // NOTE: bumped curse rates a bit so they actually show up in real play.
+    if (r2 < 22)       p.type = PowerUpType::EXTRA_BALL; // 22%
+    else if (r2 < 36)  p.type = PowerUpType::EXPAND;     // 14%
+    else if (r2 < 48)  p.type = PowerUpType::SLOW;       // 12%
+    else if (r2 < 58)  p.type = PowerUpType::EXTRA_LIFE; // 10%
+    else if (r2 < 72)  p.type = PowerUpType::FIREBALL;   // 14%
+    else if (r2 < 86)  p.type = PowerUpType::SHIELD;     // 14%
+    else if (r2 < 93)  p.type = PowerUpType::REVERSE;    // 7%
+    else               p.type = PowerUpType::TINY;       // 7%
     
     state.powerups.push_back(p);
 }
@@ -46,6 +54,22 @@ void PowerUpSystem::applyPowerUpEffect(GameState& state, const GameConfig& cfg, 
         state.slowTimer = cfg.powerUpDuration;
     } else if (type == PowerUpType::EXPAND) {
         state.expandTimer = cfg.powerUpDuration;
+    } else if (type == PowerUpType::FIREBALL) {
+        // One-shot fireball: load onto paddle immediately so player aims the shot.
+        // Simplify by turning it into a single projectile ball.
+        state.balls.clear();
+        Ball fb;
+        fb.alive = true;
+        fb.isFireball = true;
+        PhysicsSystem::resetBallToPaddle(fb, state.paddlePos, cfg);
+        state.balls.push_back(fb);
+        state.fireballTimer = 0.0f; // (legacy field; no longer used for behavior)
+    } else if (type == PowerUpType::SHIELD) {
+        state.shieldTimer = cfg.shieldDuration;
+    } else if (type == PowerUpType::REVERSE) {
+        state.reverseTimer = cfg.reverseDuration;
+    } else if (type == PowerUpType::TINY) {
+        state.tinyTimer = cfg.tinyDuration;
     }
 }
 
@@ -53,6 +77,9 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
     glm::vec3 currentPaddleSize = cfg.paddleSize;
     if (state.expandTimer > 0.0f) {
         currentPaddleSize.x *= cfg.expandScaleFactor;
+    }
+    if (state.tinyTimer > 0.0f) {
+        currentPaddleSize.x *= cfg.tinyScaleFactor;
     }
     
     float halfX = currentPaddleSize.x * 0.5f;
@@ -66,40 +93,61 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
         if (std::abs(p.pos.x - state.paddlePos.x) < halfX + cfg.ballRadius &&
             std::abs(p.pos.z - state.paddlePos.z) < halfZ + cfg.ballRadius) {
             
-            // Endless scoring on pickup:
-            // good powerups add points (into the streak bank),
-            // bad powerups (currently SLOW/snail) subtract points.
-            if (state.gameType == GameType::ENDLESS) {
-                auto addStreak = [&](int pts) {
-                    if (pts <= 0) return;
+            // Pickup scoring/penalties:
+            // - Endless: good pickups add to streak bank; bad pickups subtract from (streak first, then score)
+            // - Normal: apply directly to score
+            auto addGood = [&](int pts) {
+                if (pts <= 0) return;
+                if (state.gameType == GameType::ENDLESS) {
                     state.endlessStreakPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
                     state.endlessStreakBanking = false;
                     state.endlessStreakBankTimer = 0.0f;
-                };
-                auto applyPenalty = [&](int pts) {
-                    if (pts <= 0) return;
-                    // take from unbanked streak first, then from score
-                    int take = std::min(state.endlessStreakPoints, pts);
-                    state.endlessStreakPoints -= take;
-                    pts -= take;
+                } else {
+                    state.score += pts;
+                }
+            };
+
+            auto applyPenalty = [&](int pts) {
+                if (pts <= 0) return;
+                int penalty = pts;
+                if (state.gameType == GameType::ENDLESS) {
+                    // User expectation: penalties should affect the REAL score (visible HUD),
+                    // and only then eat into the unbanked streak if needed.
+                    int takeScore = std::min(state.score, pts);
+                    state.score -= takeScore;
+                    pts -= takeScore;
                     if (pts > 0) {
-                        state.score = std::max(0, state.score - pts);
+                        int takeStreak = std::min(state.endlessStreakPoints, pts);
+                        state.endlessStreakPoints -= takeStreak;
+                        pts -= takeStreak;
                     }
                     state.endlessStreakIdleTimer = 0.0f;
                     state.endlessStreakBanking = false;
                     state.endlessStreakBankTimer = 0.0f;
-                };
-
-                if (p.type == PowerUpType::SLOW) {
-                    applyPenalty(300);
-                } else if (p.type == PowerUpType::EXTRA_LIFE) {
-                    addStreak(500);
-                } else if (p.type == PowerUpType::EXPAND) {
-                    addStreak(250);
-                } else if (p.type == PowerUpType::EXTRA_BALL) {
-                    addStreak(350);
+                } else {
+                    state.score = std::max(0, state.score - pts);
                 }
+                // UI feedback (red "-XYZ")
+                state.scorePopups.push_back({ -penalty, 0.0f });
+            };
+
+            if (p.type == PowerUpType::SLOW) {
+                applyPenalty(300);
+            } else if (p.type == PowerUpType::EXTRA_LIFE) {
+                addGood(500);
+            } else if (p.type == PowerUpType::EXPAND) {
+                addGood(250);
+            } else if (p.type == PowerUpType::EXTRA_BALL) {
+                addGood(350);
+            } else if (p.type == PowerUpType::FIREBALL) {
+                addGood(400);
+            } else if (p.type == PowerUpType::SHIELD) {
+                addGood(300);
+            } else if (p.type == PowerUpType::REVERSE) {
+                applyPenalty(250);
+            } else if (p.type == PowerUpType::TINY) {
+                applyPenalty(250);
             }
 
             applyPowerUpEffect(state, cfg, p.type);
