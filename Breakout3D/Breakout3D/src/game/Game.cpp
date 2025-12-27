@@ -60,6 +60,27 @@ void Game::init() {
 void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
+    // Debug: spawn specific powerups at the paddle (so you're not waiting on RNG).
+    // K4: TINY, K5: FIREBALL, K6: SHIELD, K7: REVERSE
+    if (m_state.mode == GameMode::PLAYING) {
+        if (input.keyPressed(engine::Key::K4)) {
+            PowerUp p; p.type = PowerUpType::TINY; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
+            m_state.powerups.push_back(p);
+        }
+        if (input.keyPressed(engine::Key::K5)) {
+            PowerUp p; p.type = PowerUpType::FIREBALL; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
+            m_state.powerups.push_back(p);
+        }
+        if (input.keyPressed(engine::Key::K6)) {
+            PowerUp p; p.type = PowerUpType::SHIELD; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
+            m_state.powerups.push_back(p);
+        }
+        if (input.keyPressed(engine::Key::K7)) {
+            PowerUp p; p.type = PowerUpType::REVERSE; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
+            m_state.powerups.push_back(p);
+        }
+    }
+
     // =========== MENU LOGIC ===========
     if (m_state.mode == GameMode::MENU) {
         if (InputSystem::handleMenuInput(m_state, input, m_window)) {
@@ -171,6 +192,35 @@ void Game::update(const engine::Input& input) {
     }
     if (m_state.expandTimer > 0.0f) m_state.expandTimer = std::max(0.0f, m_state.expandTimer - dt);
     if (m_state.slowTimer > 0.0f) m_state.slowTimer = std::max(0.0f, m_state.slowTimer - dt);
+    if (m_state.fireballTimer > 0.0f) m_state.fireballTimer = std::max(0.0f, m_state.fireballTimer - dt);
+    if (m_state.shieldTimer > 0.0f) m_state.shieldTimer = std::max(0.0f, m_state.shieldTimer - dt);
+    if (m_state.reverseTimer > 0.0f) m_state.reverseTimer = std::max(0.0f, m_state.reverseTimer - dt);
+    if (m_state.tinyTimer > 0.0f) m_state.tinyTimer = std::max(0.0f, m_state.tinyTimer - dt);
+
+    // Fireball explosion FX timers
+    if (!m_state.fireballExplosions.empty()) {
+        for (size_t i = 0; i < m_state.fireballExplosions.size(); ) {
+            m_state.fireballExplosions[i].t += dt;
+            if (m_state.fireballExplosions[i].t >= m_cfg.fireballExplosionFxDuration) {
+                m_state.fireballExplosions.erase(m_state.fireballExplosions.begin() + i);
+            } else {
+                ++i;
+            }
+        }
+    }
+
+    // Score popup timers (penalties, etc.)
+    if (!m_state.scorePopups.empty()) {
+        const float popupDur = 0.95f;
+        for (size_t i = 0; i < m_state.scorePopups.size(); ) {
+            m_state.scorePopups[i].t += dt;
+            if (m_state.scorePopups[i].t >= popupDur) {
+                m_state.scorePopups.erase(m_state.scorePopups.begin() + i);
+            } else {
+                ++i;
+            }
+        }
+    }
 
     // Check for WIN condition (normal mode only)
     if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::NORMAL && !InitSystem::anyBricksAlive(m_state)) {
@@ -229,6 +279,7 @@ void Game::update(const engine::Input& input) {
     // Calculate current paddle size for collisions
     glm::vec3 currentPaddleSize = m_cfg.paddleSize;
     if (m_state.expandTimer > 0.0f) currentPaddleSize.x *= m_cfg.expandScaleFactor;
+    if (m_state.tinyTimer > 0.0f) currentPaddleSize.x *= m_cfg.tinyScaleFactor;
 
     // Handle collisions for each ball
     for (auto& ball : m_state.balls) {
@@ -242,6 +293,28 @@ void Game::update(const engine::Input& input) {
 
         // Brick collisions
         CollisionSystem::handleBrickCollisions(ball, m_state, m_cfg);
+    }
+
+    // Remove balls that were killed by one-shot effects (e.g., Fireball).
+    if (!m_state.balls.empty()) {
+        m_state.balls.erase(
+            std::remove_if(
+                m_state.balls.begin(),
+                m_state.balls.end(),
+                [](const Ball& b) { return !b.alive; }
+            ),
+            m_state.balls.end()
+        );
+    }
+
+    // If a one-shot fireball was consumed, respawn a normal attached ball
+    // without costing a life.
+    if (m_state.pendingRespawnAfterFireball && m_state.balls.empty() && !m_state.winFinisherActive) {
+        Ball b;
+        b.isFireball = false;
+        PhysicsSystem::resetBallToPaddle(b, m_state.paddlePos, m_cfg);
+        m_state.balls.push_back(b);
+        m_state.pendingRespawnAfterFireball = false;
     }
 
     // Endless score streak logic:
@@ -341,6 +414,27 @@ void Game::update(const engine::Input& input) {
     // Handle lives loss
     if (!m_state.winFinisherActive && m_state.balls.empty()) {
         m_state.lives--;
+        // Losing a heart = -points (but Fireball one-shot respawn does NOT reach this path).
+        if (m_cfg.lifeLossPenalty > 0) {
+            int pts = m_cfg.lifeLossPenalty;
+            if (m_state.gameType == GameType::ENDLESS) {
+                // Same rule as bad powerups: hit real score first (visible), then streak bank.
+                int takeScore = std::min(m_state.score, pts);
+                m_state.score -= takeScore;
+                pts -= takeScore;
+                if (pts > 0) {
+                    int takeStreak = std::min(m_state.endlessStreakPoints, pts);
+                    m_state.endlessStreakPoints -= takeStreak;
+                    pts -= takeStreak;
+                }
+                m_state.endlessStreakIdleTimer = 0.0f;
+                m_state.endlessStreakBanking = false;
+                m_state.endlessStreakBankTimer = 0.0f;
+            } else {
+                m_state.score = std::max(0, m_state.score - pts);
+            }
+            m_state.scorePopups.push_back({ -m_cfg.lifeLossPenalty, 0.0f });
+        }
         if (m_state.lives > 0) {
             Ball b;
             PhysicsSystem::resetBallToPaddle(b, m_state.paddlePos, m_cfg);
@@ -663,12 +757,43 @@ void Game::render() {
     // Paddle
     glm::vec3 currentPaddleSize = m_cfg.paddleSize;
     if (m_state.expandTimer > 0.0f) currentPaddleSize.x *= m_cfg.expandScaleFactor;
+    if (m_state.tinyTimer > 0.0f) currentPaddleSize.x *= m_cfg.tinyScaleFactor;
     m_renderer.drawMesh(m_assets.paddle, m_state.paddlePos, currentPaddleSize, tint);
+
+    // Shield barrier (behind paddle)
+    if (m_state.shieldTimer > 0.0f) {
+        float barrierZ = m_state.paddlePos.z + m_cfg.shieldOffsetZ;
+        barrierZ = std::min(barrierZ, 19.0f);
+        glm::vec3 barrierPos(0.0f, 0.0f, barrierZ);
+        glm::vec3 barrierSize((m_cfg.arenaMaxX - m_cfg.arenaMinX) * 1.10f, 1.0f, 0.30f);
+        m_renderer.drawMesh(m_assets.shield, barrierPos, barrierSize, glm::vec3(0.25f, 0.90f, 1.00f));
+    }
 
     // Balls
     float ballD = m_cfg.ballRadius * 2.0f;
     for (const auto& b : m_state.balls) {
-        m_renderer.drawMesh(m_assets.ball, b.pos, glm::vec3(ballD), tint);
+        if (b.isFireball) {
+            // Fireball: use model + simple orange "trail" ghosts
+            glm::vec3 fireTint(1.00f, 0.55f, 0.15f);
+            m_renderer.drawMesh(m_assets.fireball, b.pos, glm::vec3(ballD), fireTint);
+
+            // Cheap trail: offset copies opposite the velocity (no history needed)
+            float speed2 = b.vel.x * b.vel.x + b.vel.z * b.vel.z;
+            if (!b.attached && speed2 > 1e-6f) {
+                glm::vec3 dir = glm::normalize(glm::vec3(b.vel.x, 0.0f, b.vel.z));
+                const int trailCount = 6;
+                const float spacing = 0.55f;
+                for (int i = 1; i <= trailCount; ++i) {
+                    float u = (float)i / (float)(trailCount + 1);
+                    glm::vec3 tp = b.pos - dir * (spacing * (float)i);
+                    float s = ballD * (0.90f - 0.55f * u);
+                    glm::vec3 tcol(1.0f, 0.55f + 0.25f * (1.0f - u), 0.20f);
+                    m_renderer.drawMesh(m_assets.fireball, tp, glm::vec3(s), tcol);
+                }
+            }
+        } else {
+            m_renderer.drawMesh(m_assets.ball, b.pos, glm::vec3(ballD), tint);
+        }
     }
 
     // (Danger warning moved to UI pass for better visibility)
@@ -686,6 +811,10 @@ void Game::render() {
         else if (p.type == PowerUpType::EXTRA_BALL)  m = &m_assets.extraBall;
         else if (p.type == PowerUpType::SLOW)        m = &m_assets.slow;
         else if (p.type == PowerUpType::EXTRA_LIFE)  m = &m_assets.extraLife;
+        else if (p.type == PowerUpType::FIREBALL)    m = &m_assets.fireball;
+        else if (p.type == PowerUpType::SHIELD)      m = &m_assets.shield;
+        else if (p.type == PowerUpType::REVERSE)     m = &m_assets.skull;
+        else if (p.type == PowerUpType::TINY)        m = &m_assets.minus;
         
         glm::mat4 M(1.0f);
         M = glm::translate(M, p.pos + glm::vec3(0, 0.5f + powerUpBob, 0));
@@ -704,7 +833,22 @@ void Game::render() {
 
         M = glm::scale(M, glm::vec3(m_cfg.powerUpVisualScale));
 
-        m_renderer.drawMesh(*m, M, tint);
+        // Fix "Minus looks like a cube": sculpt it into a minus bar in render-space.
+        if (p.type == PowerUpType::TINY) {
+            M = glm::scale(M, glm::vec3(2.35f, 0.22f, 0.60f));
+        }
+
+        // Distinct, readable colors per powerup (user request).
+        glm::vec3 col = tint;
+        if (p.type == PowerUpType::EXPAND)      col = glm::vec3(0.25f, 0.95f, 0.25f);
+        if (p.type == PowerUpType::EXTRA_BALL)  col = glm::vec3(0.25f, 0.85f, 1.00f);
+        if (p.type == PowerUpType::SLOW)        col = glm::vec3(0.75f, 0.35f, 1.00f);
+        if (p.type == PowerUpType::EXTRA_LIFE)  col = glm::vec3(1.00f, 0.20f, 0.25f);
+        if (p.type == PowerUpType::FIREBALL)    col = glm::vec3(1.00f, 0.55f, 0.15f);
+        if (p.type == PowerUpType::SHIELD)      col = glm::vec3(0.25f, 0.90f, 1.00f);
+        if (p.type == PowerUpType::REVERSE)     col = glm::vec3(0.95f, 0.20f, 0.90f);
+        if (p.type == PowerUpType::TINY)        col = glm::vec3(1.00f, 0.80f, 0.15f);
+        m_renderer.drawMesh(*m, M, col);
     }
 
     // -------- UI PASS (HUD 3D em ortho) --------
@@ -755,6 +899,54 @@ void Game::render() {
 
         if (ringA > 0.01f) {
             drawRing(c, r, thick, ringCol);
+        }
+    }
+
+    // --- FIREBALL EXPLOSION FX (orange expanding ring at impact point) ---
+    if (!m_state.fireballExplosions.empty()) {
+        auto drawRing = [&](const glm::vec2& center, float radius, float thickness, const glm::vec4& col) {
+            const int segs = 56;
+            float r0 = std::max(0.0f, radius - thickness * 0.5f);
+            float r1 = radius + thickness * 0.5f;
+            for (int i = 0; i < segs; ++i) {
+                float a0 = (float)i / (float)segs * glm::two_pi<float>();
+                float a1 = (float)(i + 1) / (float)segs * glm::two_pi<float>();
+                glm::vec2 d0(std::cos(a0), std::sin(a0));
+                glm::vec2 d1(std::cos(a1), std::sin(a1));
+
+                glm::vec2 p0o = center + d0 * r1;
+                glm::vec2 p0i = center + d0 * r0;
+                glm::vec2 p1o = center + d1 * r1;
+                glm::vec2 p1i = center + d1 * r0;
+
+                m_renderer.drawUITriangle(p0o, p0i, p1o, col);
+                m_renderer.drawUITriangle(p0i, p1o, p1i, col);
+            }
+        };
+
+        float dur = std::max(0.001f, m_cfg.fireballExplosionFxDuration);
+        for (const auto& fx : m_state.fireballExplosions) {
+            float u = fx.t / dur;
+            if (u < 0.0f) u = 0.0f;
+            if (u > 1.0f) u = 1.0f;
+
+            // Project explosion center to UI pixels
+            glm::vec4 clip = P * V * glm::vec4(fx.pos, 1.0f);
+            if (std::abs(clip.w) < 1e-6f) continue;
+            float ndcX = clip.x / clip.w;
+            float ndcY = clip.y / clip.w;
+            if (clip.w <= 0.0f) continue;
+
+            glm::vec2 cPx(
+                (ndcX * 0.5f + 0.5f) * (float)fbW,
+                (ndcY * 0.5f + 0.5f) * (float)fbH
+            );
+
+            float radiusPx = 26.0f + 170.0f * u;
+            float thickPx = 18.0f - 10.0f * u;
+            float a = (1.0f - u) * 0.85f;
+            glm::vec4 col(1.0f, 0.55f, 0.10f, a);
+            if (a > 0.01f) drawRing(cPx, radiusPx, thickPx, col);
         }
     }
 
@@ -867,6 +1059,48 @@ void Game::render() {
                 m_renderer.drawUIText(addX, addY, addStr, addScale, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
             }
 
+            // Score popups:
+            // - negatives: red, to the LEFT of the score
+            // - positives: green, under/near the score (used e.g. by Fireball explosion)
+            if (!m_state.scorePopups.empty()) {
+                const float popupDur = 0.95f;
+                float scale = 1.35f;
+                float negMaxW = 0.0f;
+                float posMaxW = 0.0f;
+                for (const auto& sp : m_state.scorePopups) {
+                    std::string s = (sp.pts >= 0) ? ("+" + std::to_string(sp.pts)) : std::to_string(sp.pts);
+                    float w = m_renderer.measureUITextWidth(s, scale);
+                    if (sp.pts < 0) negMaxW = std::max(negMaxW, w);
+                    else            posMaxW = std::max(posMaxW, w);
+                }
+
+                float negX = scoreX - 18.0f - negMaxW;
+                float posX = scoreX + (scoreTotalW - posMaxW) * 0.5f;
+
+                float yBase = scoreY - scoreH * 1.25f;
+                int negIdx = 0;
+                int posIdx = 0;
+
+                for (const auto& sp : m_state.scorePopups) {
+                    float u = std::min(1.0f, std::max(0.0f, sp.t / popupDur));
+                    float ease = u * u * (3.0f - 2.0f * u);
+                    std::string s = (sp.pts >= 0) ? ("+" + std::to_string(sp.pts)) : std::to_string(sp.pts);
+                    if (sp.pts < 0) {
+                        // User request: same float/fade feel as the white streak popup.
+                        float yOffset = ease * 22.0f;
+                        float a = 1.0f - 0.65f * ease;
+                        float y = yBase + yOffset + (float)negIdx * 20.0f;
+                        m_renderer.drawUIText(negX, y, s, scale, glm::vec4(1.0f, 0.15f, 0.15f, a));
+                        negIdx++;
+                    } else if (sp.pts > 0) {
+                        float a = 1.0f - 0.75f * ease; // green can stay "snappier"
+                        float y = yBase + ease * 26.0f + (float)posIdx * 20.0f;
+                        m_renderer.drawUIText(posX, y, s, scale, glm::vec4(0.35f, 1.0f, 0.35f, a));
+                        posIdx++;
+                    }
+                }
+            }
+
             if (m_state.endlessDangerActive && (m_state.mode == GameMode::PLAYING || m_state.mode == GameMode::PAUSED)) {
                 bool veryCloseToDeath = (((m_state.paddlePos.z - 0.5f) - m_state.endlessDangerMaxZ) <= (1.33f * 2.0f));
                 if (m_state.endlessDangerTimer < 10.0f || veryCloseToDeath) {
@@ -952,6 +1186,23 @@ void Game::render() {
             }
         } else {
             // Normal mode: score HUD removed (per request).
+            // Still show penalty popups for feedback.
+            if (!m_state.scorePopups.empty()) {
+                const float popupDur = 0.95f;
+                float scale = 1.25f;
+                float x = padX; // left side, under hearts
+                float yBase = (float)fbH - (padTop + hs + 24.0f);
+                for (size_t i = 0; i < m_state.scorePopups.size(); ++i) {
+                    const auto& sp = m_state.scorePopups[i];
+                    float u = std::min(1.0f, std::max(0.0f, sp.t / popupDur));
+                    float ease = u * u * (3.0f - 2.0f * u);
+                    float y = yBase - ease * 26.0f - (float)i * 20.0f;
+                    float a = 1.0f - 0.75f * ease;
+                    std::string s = (sp.pts >= 0) ? ("+" + std::to_string(sp.pts)) : std::to_string(sp.pts);
+                    glm::vec4 c = (sp.pts >= 0) ? glm::vec4(0.35f, 1.0f, 0.35f, a) : glm::vec4(1.0f, 0.15f, 0.15f, a);
+                    m_renderer.drawUIText(x, y, s, scale, c);
+                }
+            }
         }
 
     }
