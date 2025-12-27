@@ -191,8 +191,11 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 // Spawn a UI explosion ring at the impact point.
                 state.fireballExplosions.push_back({ br.pos, 0.0f });
                 if (explosionPts > 0) {
-                    // Show immediate +PTS popup near the score HUD
-                    state.scorePopups.push_back({ explosionPts, 0.0f });
+                    // Show immediate +PTS popup near the score HUD (Endless only).
+                    // Normal mode keeps score HUD hidden, so skip positive popups there.
+                    if (state.gameType == GameType::ENDLESS) {
+                        state.scorePopups.push_back({ explosionPts, 0.0f });
+                    }
                 }
 
                 // One-shot: delete the fireball ball (no bounce).

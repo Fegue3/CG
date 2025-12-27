@@ -430,7 +430,7 @@ void Game::update(const engine::Input& input) {
                 m_state.endlessStreakBankTimer = 0.0f;
             } else {
                 m_state.score = std::max(0, m_state.score - m_cfg.lifeLossPenalty);
-                m_state.scorePopups.push_back({ -m_cfg.lifeLossPenalty, 0.0f });
+                // Normal mode: don't show score popups.
             }
         }
         if (m_state.lives > 0) {
@@ -836,16 +836,19 @@ void Game::render() {
             M = glm::scale(M, glm::vec3(2.35f, 0.22f, 0.60f));
         }
 
-        // Distinct, readable colors per powerup (user request).
+        // Distinct, readable colors per powerup (more representative).
         glm::vec3 col = tint;
-        if (p.type == PowerUpType::EXPAND)      col = glm::vec3(0.25f, 0.95f, 0.25f);
-        if (p.type == PowerUpType::EXTRA_BALL)  col = glm::vec3(0.25f, 0.85f, 1.00f);
-        if (p.type == PowerUpType::SLOW)        col = glm::vec3(0.75f, 0.35f, 1.00f);
-        if (p.type == PowerUpType::EXTRA_LIFE)  col = glm::vec3(1.00f, 0.20f, 0.25f);
-        if (p.type == PowerUpType::FIREBALL)    col = glm::vec3(1.00f, 0.55f, 0.15f);
-        if (p.type == PowerUpType::SHIELD)      col = glm::vec3(0.25f, 0.90f, 1.00f);
-        if (p.type == PowerUpType::REVERSE)     col = glm::vec3(0.95f, 0.20f, 0.90f);
-        if (p.type == PowerUpType::TINY)        col = glm::vec3(1.00f, 0.80f, 0.15f);
+        // Good
+        if (p.type == PowerUpType::EXPAND)      col = glm::vec3(0.25f, 0.95f, 0.25f); // growth = green
+        if (p.type == PowerUpType::EXTRA_BALL)  col = glm::vec3(0.15f, 0.70f, 1.00f); // extra = blue
+        if (p.type == PowerUpType::EXTRA_LIFE)  col = glm::vec3(1.00f, 0.18f, 0.22f); // heart = red
+        if (p.type == PowerUpType::FIREBALL)    col = glm::vec3(1.00f, 0.55f, 0.15f); // fire = orange
+        if (p.type == PowerUpType::SHIELD)      col = glm::vec3(0.20f, 0.95f, 1.00f); // shield = cyan
+
+        // Bad / curses
+        if (p.type == PowerUpType::SLOW)        col = glm::vec3(0.55f, 0.38f, 0.22f); // snail = brown
+        if (p.type == PowerUpType::REVERSE)     col = glm::vec3(0.95f, 0.20f, 0.90f); // cursed = magenta
+        if (p.type == PowerUpType::TINY)        col = glm::vec3(1.00f, 0.85f, 0.10f); // shrink = yellow
         m_renderer.drawMesh(*m, M, col);
     }
 
@@ -1200,23 +1203,7 @@ void Game::render() {
             }
         } else {
             // Normal mode: score HUD removed (per request).
-            // Still show penalty popups for feedback.
-            if (!m_state.scorePopups.empty()) {
-                const float popupDur = 0.95f;
-                float scale = 1.25f;
-                float x = padX; // left side, under hearts
-                float yBase = (float)fbH - (padTop + hs + 24.0f);
-                for (size_t i = 0; i < m_state.scorePopups.size(); ++i) {
-                    const auto& sp = m_state.scorePopups[i];
-                    float u = std::min(1.0f, std::max(0.0f, sp.t / popupDur));
-                    float ease = u * u * (3.0f - 2.0f * u);
-                    float y = yBase - ease * 26.0f - (float)i * 20.0f;
-                    float a = 1.0f - 0.75f * ease;
-                    std::string s = (sp.pts >= 0) ? ("+" + std::to_string(sp.pts)) : std::to_string(sp.pts);
-                    glm::vec4 c = (sp.pts >= 0) ? glm::vec4(0.35f, 1.0f, 0.35f, a) : glm::vec4(1.0f, 0.15f, 0.15f, a);
-                    m_renderer.drawUIText(x, y, s, scale, c);
-                }
-            }
+            // Normal mode: don't show score popups (green or red).
         }
 
     }

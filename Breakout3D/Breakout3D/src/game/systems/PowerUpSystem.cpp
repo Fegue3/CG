@@ -121,8 +121,7 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
                     state.endlessStreakBankTimer = 0.0f;
                 } else {
                     state.score = std::max(0, state.score - pts);
-                    // UI feedback for normal mode (score HUD is hidden but we still show feedback)
-                    state.scorePopups.push_back({ -pts, 0.0f });
+                    // Normal mode: don't show score popups.
                 }
             };
 
