@@ -7,7 +7,13 @@ enum class PowerUpType {
     EXPAND,
     EXTRA_BALL,
     SLOW,
-    EXTRA_LIFE
+    EXTRA_LIFE,
+
+    // New powerups/curses
+    FIREBALL, // ball becomes a fireball (orange trail) + AoE explosion on brick hit
+    SHIELD,   // temporary barrier behind the paddle that saves balls
+    REVERSE,  // curse: invert left/right controls
+    TINY      // curse: shrink paddle
 };
 
 struct PowerUp {
