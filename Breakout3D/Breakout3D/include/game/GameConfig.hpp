@@ -21,7 +21,7 @@ struct GameConfig {
 
     // Powerups
     float powerUpDropSpeed = 4.5f;
-    float powerUpChance = 0.25f; // 25% chance
+    float powerUpChance = 0.40f; // 40% chance (increased from 25%)
     float powerUpDuration = 7.0f;
     float powerUpVisualScale = 1.15f;
     float slowSpeedFactor = 0.5f;
