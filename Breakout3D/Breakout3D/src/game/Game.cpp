@@ -50,10 +50,10 @@ static void spawnPowerUp(GameState& s, const glm::vec3& pos, float chance) {
     p.pos.y = 0.4f;
 
     int r2 = rand() % 100;
-    if (r2 < 2)        p.type = PowerUpType::EXTRA_LIFE; // 2% (Rarer)
-    else if (r2 < 35)  p.type = PowerUpType::EXPAND;     // 33%
-    else if (r2 < 68)  p.type = PowerUpType::SLOW;       // 33%
-    else               p.type = PowerUpType::EXTRA_BALL; // 32%
+    if (r2 < 15)       p.type = PowerUpType::EXTRA_LIFE; // 15% (was 2%)
+    else if (r2 < 43)  p.type = PowerUpType::EXPAND;     // 28%
+    else if (r2 < 71)  p.type = PowerUpType::SLOW;       // 28%
+    else               p.type = PowerUpType::EXTRA_BALL; // 29%
     
     s.powerups.push_back(p);
 }
@@ -96,22 +96,27 @@ void Game::generateBricks(int waveNumber) {
             b.pos.y = 0.0f;
             b.pos.z = startZ + r * (brickSize.z + gapZ);
 
-            // For normal mode: 2 roxo, 2 azul, 2 amarelo, 3 verde
-            // For endless mode: all bricks have scaled HP based on wave
-            if (waveNumber == 0) {
-                // Normal mode: fixed distribution
-                if (r <= 1)      b.maxHp = b.hp = 4;
-                else if (r <= 3) b.maxHp = b.hp = 3;
-                else if (r <= 5) b.maxHp = b.hp = 2;
-                else             b.maxHp = b.hp = 1;
+            // Split wall into Front (closer to paddle) and Back (further away)
+            // r: 0 is Top/Back, rows-1 is Bottom/Front
+            bool isFrontHalf = (r >= rows / 2);
+
+            if (isFrontHalf) {
+                // Front half: Easier bricks (mostly 1, 2, some 3)
+                int r2 = rand() % 100;
+                if (r2 < 45)      b.maxHp = b.hp = 1; // Green
+                else if (r2 < 85) b.maxHp = b.hp = 2; // Yellow
+                else              b.maxHp = b.hp = 3; // Blue
             } else {
-                // Endless mode: wave-based HP
-                // Distribute maxHp across rows (harder at top)
-                int hpBonus = waveNumber / 5;  // +1 HP every 5 waves
-                if (r < rows / 3)           b.maxHp = b.hp = std::min(6, 4 + hpBonus);
-                else if (r < 2 * rows / 3) b.maxHp = b.hp = std::min(6, 3 + hpBonus);
-                else if (r < rows - 2)     b.maxHp = b.hp = std::min(6, 2 + hpBonus);
-                else                        b.maxHp = b.hp = std::min(6, 1 + hpBonus);
+                // Back half: Random bricks
+                if (waveNumber == 0) {
+                    // Normal mode: random HP (1-4)
+                    b.maxHp = b.hp = 1 + (rand() % 4);
+                } else {
+                    // Endless mode: random HP with wave-based bonus
+                    int hpBonus = waveNumber / 5;  // +1 HP every 5 waves
+                    int baseHp = 1 + (rand() % 4);  // Random 1-4
+                    b.maxHp = b.hp = std::min(6, baseHp + hpBonus);
+                }
             }
 
             m_state.bricks.push_back(b);
@@ -156,9 +161,10 @@ void Game::spawnIncrementalBricks(int count, int waveNumber) {
         b.pos.y = 0.0f;
         b.pos.z = topZ + rowLocal * stepZ;  // place below the current top
 
-        // Difficulty based on cumulative rows spawned in endless
-        int hp = 1 + (rowGlobal / 20); // every 20 rows increases HP by 1
-        b.maxHp = b.hp = std::min(6, hp);
+        // Random HP with difficulty based on cumulative rows spawned in endless
+        int baseHp = 1 + (rand() % 4);  // Random 1-4
+        int difficultyBonus = (rowGlobal / 20); // every 20 rows increases bonus by 1
+        b.maxHp = b.hp = std::min(6, baseHp + difficultyBonus);
 
         m_state.bricks.push_back(b);
     }
@@ -175,6 +181,8 @@ void Game::init() {
     m_state.bricksDestroyedThisWave = 0;
     m_state.endlessRowsSpawned = 0;
     m_state.score = 0;
+    m_state.endlessDangerActive = false;
+    m_state.endlessDangerTimer = 0.0f;
     
     // For endless mode, wave is already set before calling init()
     // For normal mode, reset wave to 1
@@ -478,10 +486,10 @@ void Game::update(const engine::Input& input) {
                             m_state.bricksDestroyedThisWave++;
 
                             // Queue new bricks whenever threshold is reached (spawn after loop)
-                            if (m_state.bricksDestroyedThisWave >= 30) { // spawn a row every 30 bricks destroyed
+                            if (m_state.bricksDestroyedThisWave >= 15) { // spawn a row every 15 bricks destroyed
                                 m_state.pendingSpawnBricks += 12; // add full rows
                                 // Keep remainder in case multiple bricks are destroyed rapidly
-                                m_state.bricksDestroyedThisWave -= 30;
+                                m_state.bricksDestroyedThisWave -= 15;
                             }
                         }
                     }
@@ -521,15 +529,35 @@ void Game::update(const engine::Input& input) {
 
     // (Removed auto/fallback spawns; now spawning is strictly tied to bricks destroyed or manual debug key)
 
-    // Lose condition: a brick reached the paddle zone
+    // Lose condition: a brick reached the paddle zone + Danger Warning
     if (m_state.gameType == GameType::ENDLESS) {
         float limitZ = m_state.paddlePos.z - 0.5f; // small margin above paddle
+        float warningThresholdZ = limitZ - (1.33f * 3.0f); // ~3 rows away
+        
+        float maxZFound = -20.0f;
+        bool anyBricksAliveInEndless = false;
+
         for (const auto& br : m_state.bricks) {
             if (!br.alive) continue;
-            if (br.pos.z + br.size.z * 0.5f >= limitZ) {
+            anyBricksAliveInEndless = true;
+            float brMaxZ = br.pos.z + br.size.z * 0.5f;
+            if (brMaxZ > maxZFound) maxZFound = brMaxZ;
+
+            if (brMaxZ >= limitZ) {
                 m_state.mode = GameMode::GAME_OVER;
                 m_state.balls.clear();
                 break;
+            }
+        }
+
+        if (m_state.mode != GameMode::GAME_OVER) {
+            m_state.endlessDangerActive = (anyBricksAliveInEndless && maxZFound >= warningThresholdZ);
+            if (m_state.endlessDangerActive) {
+                m_state.endlessDangerTimer += dt;
+                m_state.endlessDangerMaxZ = maxZFound;
+            } else {
+                m_state.endlessDangerTimer = 0.0f;
+                m_state.endlessDangerMaxZ = -20.0f;
             }
         }
     }
@@ -549,9 +577,14 @@ void Game::update(const engine::Input& input) {
             if (p.type == PowerUpType::EXTRA_LIFE) {
                 m_state.lives++;
             } else if (p.type == PowerUpType::EXTRA_BALL) {
+                // Spawn new balls from the first active ball, or paddle if none
+                glm::vec3 spawnPos = m_state.paddlePos + glm::vec3(0, 0, -0.5f);
+                if (!m_state.balls.empty()) {
+                    spawnPos = m_state.balls[0].pos;
+                }
                 for (int k = 0; k < 3; k++) {
                     Ball nb;
-                    nb.pos = m_state.paddlePos + glm::vec3(0,0,-0.5f);
+                    nb.pos = spawnPos;
                     float ang = glm::radians(-30.0f + k * 30.0f);
                     nb.vel = glm::vec3(std::sin(ang), 0.0f, -std::cos(ang)) * m_cfg.ballSpeed;
                     nb.attached = false;
@@ -795,6 +828,8 @@ void Game::render() {
         m_renderer.drawMesh(m_assets.ball, b.pos, glm::vec3(ballD), tint);
     }
 
+    // (Danger warning moved to UI pass for better visibility)
+
     // Powerups
     float powerUpSpin = m_time.now() * 2.5f;
     // 90 degrees (stand up) + ~33 degrees (tilt towards camera) = ~123
@@ -938,6 +973,69 @@ void Game::render() {
         if (m_state.gameType == GameType::ENDLESS) {
             std::string waveStr = "Wave: " + std::to_string(m_state.wave);
             m_renderer.drawUIText(padX, (float)fbH - padTop - 35.0f, waveStr, 1.0f, glm::vec3(0.2f, 0.8f, 1.0f));
+
+            if (m_state.endlessDangerActive && m_state.mode == GameMode::PLAYING) {
+                float flash = (std::sin(m_state.endlessDangerTimer * 10.0f) * 0.5f + 0.5f);
+                float triAlpha = 0.4f + 0.5f * flash; // Pulsing transparency
+
+                // 1. Dynamic Pulsing Red "Blur" Overlay (Moved OUTSIDE 10s timer)
+                // Project one row BELOW the lowest brick row to make it "1 row smaller"
+                glm::vec3 brickWorldPos(0.0f, 0.0f, m_state.endlessDangerMaxZ + 1.33f);
+                glm::vec4 ndc = m_renderer.getP() * m_renderer.getV() * glm::vec4(brickWorldPos, 1.0f);
+                float screenY = ((ndc.y / ndc.w) * 0.5f + 0.5f) * (float)fbH;
+                
+                float overlayH = screenY;
+                // POP! High intensity, permanent while danger active
+                m_renderer.drawUIQuad(0.0f, 0.0f, (float)fbW, overlayH, glm::vec4(1.0f, 0.0f, 0.0f, 0.20f + 0.35f * flash));
+
+                if (m_state.endlessDangerTimer < 10.0f) {
+                    // 2. Signs (Red, Big & Transparent)
+                    if (flash > 0.4f) {
+                        std::string dMsg = "DANGER!";
+                        float dScale = 2.8f; 
+                        float dW = dMsg.size() * 14.0f * dScale;
+                        float yPos = 75.0f; 
+                        float yMid = yPos + (10.0f * dScale); 
+                        
+                        m_renderer.drawUIText((float)fbW * 0.5f - dW * 0.5f, yPos, dMsg, dScale, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
+                        
+                        auto drawTriangleSign = [&](float x) {
+                            float triW = 100.0f; 
+                            float triH = 85.0f;  
+                            float yTri = yMid - triH * 0.5f; 
+                            
+                            glm::vec2 pTop(x, yTri + triH);
+                            glm::vec2 pLeft(x - triW*0.5f, yTri);
+                            glm::vec2 pRight(x + triW*0.5f, yTri);
+                            
+                            auto drawEdge = [&](const glm::vec2& a, const glm::vec2& b, float t) {
+                                glm::vec2 d = b - a;
+                                float len = glm::length(d);
+                                if (len < 0.01f) return;
+                                glm::vec2 dir = d / len;
+                                glm::vec2 perp(-dir.y, dir.x);
+                                glm::vec2 c1 = a + perp * (t * 0.5f);
+                                glm::vec2 c2 = a - perp * (t * 0.5f);
+                                glm::vec2 c3 = b + perp * (t * 0.5f);
+                                glm::vec2 c4 = b - perp * (t * 0.5f);
+                                m_renderer.drawUITriangle(c1, c2, c3, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
+                                m_renderer.drawUITriangle(c2, c3, c4, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
+                            };
+
+                            float edgeT = 6.0f;
+                            drawEdge(pLeft, pRight, edgeT);
+                            drawEdge(pLeft, pTop, edgeT);
+                            drawEdge(pRight, pTop, edgeT);
+
+                            m_renderer.drawUIQuad(x - 3, yTri + 30, 6, 40, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
+                            m_renderer.drawUIQuad(x - 3, yTri + 16, 6, 6, glm::vec4(1.0f, 0.0f, 0.0f, triAlpha));
+                        };
+
+                        drawTriangleSign((float)fbW * 0.15f);
+                        drawTriangleSign((float)fbW * 0.85f);
+                    }
+                }
+            }
         }
 
     }
