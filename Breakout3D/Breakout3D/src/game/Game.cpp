@@ -167,6 +167,7 @@ void Game::update(const engine::Input& input) {
             // Right button: Back to Menu
             if (L.rightBtn.contains(px, py)) {
                 m_state.mode = GameMode::MENU;
+                m_state.currentMenuScreen = MenuScreen::MAIN;
                 m_state.showInstructions = false;
                 return;
             }
@@ -290,6 +291,7 @@ void Game::update(const engine::Input& input) {
             // Right button: Back to Menu
             if (L.rightBtn.contains(px, py)) {
                 m_state.mode = GameMode::MENU;
+                m_state.currentMenuScreen = MenuScreen::MAIN;
                 m_state.showInstructions = false;
                 return;
             }
