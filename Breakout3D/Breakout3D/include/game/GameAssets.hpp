@@ -1,6 +1,7 @@
 #pragma once
 #include "engine/Mesh.hpp"
 #include "engine/Texture.hpp"
+#include "engine/Shader.hpp"
 
 namespace game {
 
@@ -35,6 +36,10 @@ struct GameAssets {
     engine::Mesh skull; // reverse controls curse
     engine::Mesh minus; // tiny paddle curse
     engine::Texture2D backgroundTexs[4];
+    
+    // Scrolling background shader and mesh
+    engine::Shader scrollingBgShader;
+    engine::Mesh backgroundMesh;
 
     bool loadAll();
     void destroy();
