@@ -95,9 +95,8 @@ bool Renderer::loadUIFont(const std::string& ttfPath) {
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_uiFontTexW, m_uiFontTexH, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap.data());
 
-    // Mipmaps help keep small UI text crisp/stable while still looking good when scaled up.
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    // Use GL_LINEAR sem mipmaps para evitar artifacts/linhas horizontais
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -356,6 +355,53 @@ void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& c
         {-0.5f, -0.5f, 0.0f, 0.0f, 0.0f},
         { 0.5f,  0.5f, 0.0f, 0.0f, 0.0f},
         {-0.5f,  0.5f, 0.0f, 0.0f, 0.0f},
+    };
+
+    glBindVertexArray(m_uiVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_uiVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+// Overload with texture support
+void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& color, unsigned int textureId) {
+    m_shader.use();
+    GLuint p = m_shader.id();
+
+    glm::mat4 M = glm::translate(glm::mat4(1.0f), glm::vec3(x + w*0.5f, y + h*0.5f, 0.0f));
+    M = glm::scale(M, glm::vec3(w, h, 1.0f));
+
+    setMat4(p, "uV", m_V);
+    setMat4(p, "uP", m_P);
+    setMat4(p, "uM", M);
+
+    setInt(p, "uUseTex", 1);
+    setTexMode(p, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    setInt(p, "uTex", 0);
+
+    setVec3(p, "uAlbedo", glm::vec3(color));
+    setFloat(p, "uAlpha", color.a);
+
+    setFloat(p, "uAmbientK", 1.0f);
+    setFloat(p, "uDiffuseK", 0.0f);
+    setFloat(p, "uSpecK", 0.0f);
+
+    setInt(p, "uUseMask", 0);
+    setVec2(p, "uMaskMin", glm::vec2(0.0f));
+    setVec2(p, "uMaskMax", glm::vec2(0.0f));
+
+    // Two triangles with proper UVs
+    UiVertex verts[6] = {
+        {-0.5f, -0.5f, 0.0f, 0.0f, 0.0f}, // bottom-left
+        { 0.5f, -0.5f, 0.0f, 1.0f, 0.0f}, // bottom-right
+        { 0.5f,  0.5f, 0.0f, 1.0f, 1.0f}, // top-right
+        {-0.5f, -0.5f, 0.0f, 0.0f, 0.0f}, // bottom-left
+        { 0.5f,  0.5f, 0.0f, 1.0f, 1.0f}, // top-right
+        {-0.5f,  0.5f, 0.0f, 0.0f, 1.0f}, // top-left
     };
 
     glBindVertexArray(m_uiVao);
