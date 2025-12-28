@@ -4,6 +4,7 @@
 #include "game/entities/Brick.hpp"
 #include "game/entities/Ball.hpp"
 #include "game/entities/PowerUp.hpp" // includes PowerUpType enum
+#include "game/ui/OverlayLayout.hpp"
 
 namespace game {
 
@@ -119,6 +120,9 @@ struct GameState {
     bool hoveredTestBadge = false; // ONE BRICK test badge
     bool showInstructions = false;
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
+
+    // Cached menu layout (computed using real font metrics to keep input + render aligned).
+    ui::MenuLayout menuLayout;
     // Endless danger warning
     bool endlessDangerActive = false;
     float endlessDangerTimer = 0.0f;

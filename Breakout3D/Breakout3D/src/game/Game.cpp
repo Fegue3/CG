@@ -92,6 +92,11 @@ void Game::update(const engine::Input& input) {
 
     // =========== MENU LOGIC ===========
     if (m_state.mode == GameMode::MENU) {
+        // Keep menu layout synced with the current framebuffer size and real font metrics.
+        {
+            auto [fbW, fbH] = m_window.getFramebufferSize();
+            m_state.menuLayout = ui::calculateMenuLayout(m_renderer, fbW, fbH);
+        }
         if (InputSystem::handleMenuInput(m_state, input, m_window)) {
             // If menu handled input and signaled init needed
             if (m_state.mode == GameMode::PLAYING) {
@@ -477,6 +482,8 @@ void Game::render() {
 
     // =========== MENU RENDER ===========
     if (m_state.mode == GameMode::MENU) {
+        // Defensive: ensure layout is available even if render runs before first update.
+        m_state.menuLayout = ui::calculateMenuLayout(m_renderer, fbW, fbH);
         game::render::RenderContext ctx{fbW, fbH, m_time, m_renderer};
         game::render::renderMenu(ctx, m_state, m_assets);
         m_window.swapBuffers();
