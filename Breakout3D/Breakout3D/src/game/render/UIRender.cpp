@@ -245,10 +245,10 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
     float btnX = panelX + (panelW - btnW) * 0.5f;
 
     // Button positions (from top to bottom)
-    float btn1Y = panelY + 360.0f; // Normal Mode (top)
-    float btn2Y = panelY + 250.0f; // Endless Mode
-    float btn3Y = panelY + 140.0f; // Instructions
-    float btn4Y = panelY + 30.0f;  // Exit (bottom)
+    float btn1Y = panelY + 360.0f;
+    float btn2Y = panelY + 250.0f;
+    float btn3Y = panelY + 140.0f;
+    float btn4Y = panelY + 30.0f;
 
     auto drawButton = [&](int btnIndex, float bx, float by, float bw, float bh, 
                           const std::string& label, const glm::vec3& baseColor, 
@@ -299,32 +299,81 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         }
     };
 
-    // Draw all buttons
-    drawButton(0, btnX, btn1Y, btnW, btnH, "NORMAL", glm::vec3(0.2f, 0.7f, 0.2f), "Classic Mode");
-    drawButton(1, btnX, btn2Y, btnW, btnH, "ENDLESS", glm::vec3(0.8f, 0.5f, 0.2f), "Survival Mode");
-    drawButton(2, btnX, btn3Y, btnW, btnH, "INSTRUCTIONS", glm::vec3(0.3f, 0.5f, 0.8f), "How to Play");
-    drawButton(3, btnX, btn4Y, btnW, btnH, "EXIT", glm::vec3(0.7f, 0.2f, 0.2f), "Quit Game");
+    // Draw buttons based on current menu screen
+    if (state.currentMenuScreen == MenuScreen::MAIN) {
+        // Main menu: PLAY, INSTRUCTIONS, OPTIONS, EXIT
+        drawButton(0, btnX, btn1Y, btnW, btnH, "PLAY", glm::vec3(0.2f, 0.7f, 0.2f), "Game Modes");
+        drawButton(1, btnX, btn2Y, btnW, btnH, "INSTRUCTIONS", glm::vec3(0.3f, 0.5f, 0.8f), "How to Play");
+        drawButton(2, btnX, btn3Y, btnW, btnH, "OPTIONS", glm::vec3(0.7f, 0.5f, 0.2f), "Settings");
+        drawButton(3, btnX, btn4Y, btnW, btnH, "EXIT", glm::vec3(0.7f, 0.2f, 0.2f), "Quit Game");
+    } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
+        // Play modes submenu: NORMAL, ENDLESS, ROGUE (placeholder), LEVELS (placeholder), BACK
+        drawButton(0, btnX, btn1Y, btnW, btnH, "NORMAL", glm::vec3(0.2f, 0.7f, 0.2f), "Classic Mode");
+        drawButton(1, btnX, btn2Y, btnW, btnH, "ENDLESS", glm::vec3(0.8f, 0.5f, 0.2f), "Survival Mode");
+        drawButton(2, btnX, btn3Y, btnW, btnH, "ROGUE", glm::vec3(0.6f, 0.2f, 0.7f), "Coming Soon");
+        drawButton(3, btnX, btn4Y, btnW, btnH, "LEVELS", glm::vec3(0.2f, 0.6f, 0.7f), "Coming Soon");
+        
+        // BACK button (smaller, bottom left)
+        float backW = 120.0f;
+        float backH = 50.0f;
+        float backX = panelX + 20.0f;
+        float backY = panelY + 15.0f;
+        drawButton(4, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+    } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
+        // Options submenu: SOUND (placeholder), GRAPHICS (placeholder), BACK
+        drawButton(0, btnX, btn1Y - 50.0f, btnW, btnH, "SOUND", glm::vec3(0.3f, 0.6f, 0.7f), "Coming Soon");
+        drawButton(1, btnX, btn2Y - 50.0f, btnW, btnH, "GRAPHICS", glm::vec3(0.6f, 0.3f, 0.7f), "Coming Soon");
+        
+        // BACK button
+        float backW = 120.0f;
+        float backH = 50.0f;
+        float backX = panelX + 20.0f;
+        float backY = panelY + 15.0f;
+        drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+    }
 
-    // Small clickable "4" badge for the one-brick test mode.
-    {
+    // Small clickable "4" badge for the one-brick test mode (only on MAIN menu, bottom-right corner)
+    if (state.currentMenuScreen == MenuScreen::MAIN) {
         float badgeW = 48.0f;
-        float badgeH = btnH - 16.0f;
-        float badgeX = btnX + btnW - 8.0f - badgeW;
-        float badgeY = btn4Y + 8.0f;
-        ctx.renderer.drawUIQuad(badgeX, badgeY, badgeW, badgeH, glm::vec4(0.2f, 0.8f, 1.0f, 1.0f));
+        float badgeH = 48.0f;
+        float badgeX = panelX + panelW - badgeW - 15.0f; // Bottom-right corner
+        float badgeY = panelY + 15.0f;
+        
+        bool hovered = state.hoveredTestBadge;
+        float hoverScale = hovered ? 1.15f : 1.0f;
+        float hoverBrightness = hovered ? 1.4f : 1.0f;
+        
+        // Shadow (larger on hover)
+        float shadowOffset = hovered ? 4.0f : 2.0f;
+        ctx.renderer.drawUIQuad(badgeX + shadowOffset, badgeY - shadowOffset, 
+                               badgeW, badgeH, glm::vec4(0.0f, 0.0f, 0.0f, hovered ? 0.6f : 0.4f));
+        
+        // Badge background with hover brightness
+        glm::vec3 badgeColor = glm::vec3(0.2f, 0.8f, 1.0f) * hoverBrightness;
+        ctx.renderer.drawUIQuad(badgeX, badgeY, badgeW, badgeH, glm::vec4(badgeColor, 1.0f));
         ctx.renderer.drawUIQuad(badgeX + 2.0f, badgeY + 2.0f, badgeW - 4.0f, badgeH - 4.0f, glm::vec4(0.06f, 0.06f, 0.10f, 1.0f));
 
+        // "4" text with hover scale and glow
         std::string k = "4";
-        float kScale = 1.4f;
+        float kScale = 1.4f * hoverScale;
         float kW = ctx.renderer.measureUITextWidth(k, kScale);
         float kH = ctx.renderer.getUIFontLineHeight(kScale);
-        ctx.renderer.drawUIText(badgeX + (badgeW - kW) * 0.5f, badgeY + (badgeH - kH) * 0.5f, k, kScale, glm::vec3(0.2f, 0.8f, 1.0f));
+        float kX = badgeX + (badgeW - kW) * 0.5f;
+        float kY = badgeY + (badgeH - kH) * 0.5f;
+        
+        // Glow effect on hover
+        if (hovered) {
+            ctx.renderer.drawUIText(kX + 1.0f, kY, k, kScale, glm::vec3(0.5f, 1.0f, 1.0f) * 0.5f);
+            ctx.renderer.drawUIText(kX - 1.0f, kY, k, kScale, glm::vec3(0.5f, 1.0f, 1.0f) * 0.5f);
+        }
+        ctx.renderer.drawUIText(kX, kY, k, kScale, glm::vec3(0.2f, 0.8f, 1.0f) * hoverBrightness);
 
-        // Hint text under the button
+        // Hint text above the badge (brighter on hover)
         std::string hint = "ONE BRICK";
-        float hScale = 0.58f;
+        float hScale = 0.48f;
         float hW = ctx.renderer.measureUITextWidth(hint, hScale);
-        ctx.renderer.drawUIText(btnX + (btnW - hW) * 0.5f, btn4Y - 20.0f, hint, hScale, glm::vec3(0.6f, 0.85f, 1.0f));
+        glm::vec3 hintColor = hovered ? glm::vec3(0.8f, 1.0f, 1.0f) : glm::vec3(0.6f, 0.85f, 1.0f);
+        ctx.renderer.drawUIText(badgeX + (badgeW - hW) * 0.5f, badgeY + badgeH + 8.0f, hint, hScale, hintColor);
     }
 
     // Show instructions if toggled
