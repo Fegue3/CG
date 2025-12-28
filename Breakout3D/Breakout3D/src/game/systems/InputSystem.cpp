@@ -3,6 +3,7 @@
 #include "game/GameState.hpp"
 #include "game/entities/Ball.hpp"
 #include "game/systems/PhysicsSystem.hpp"
+#include "game/ui/OverlayLayout.hpp"
 #include "engine/Window.hpp"
 #include <glm/glm.hpp>
 
@@ -18,30 +19,12 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     float py = (float)fbH - py_raw;
     bool click = input.mousePressed(engine::MouseButton::Left);
 
-    // Menu button positions
-    float panelW = 500.0f;
-    float panelH = 480.0f;
-    float panelX = (fbW - panelW) * 0.5f;
-    float panelY = (fbH - panelH) * 0.5f;
-
-    float btnW = 200.0f;
-    float btnH = 70.0f;
-    float btnX = panelX + (panelW - btnW) * 0.5f;
-    
-    // Button positions (from top to bottom)
-    float btn1Y = panelY + 360.0f; // Normal Mode (top)
-    float btn2Y = panelY + 250.0f; // Endless Mode
-    float btn3Y = panelY + 140.0f; // Instructions
-    float btn4Y = panelY + 30.0f;  // Exit (bottom)
-
-    // Small "4" test badge inside the bottom button (same coords as in Game.cpp render).
-    float testW = 48.0f;
-    float testH = btnH - 16.0f;
-    float testX = btnX + btnW - 8.0f - testW;
-    float testY = btn4Y + 8.0f;
+    // Get menu layout (must match UIRender.cpp)
+    ui::MenuLayout menu = ui::calculateMenuLayout(fbW, fbH);
 
     // If instructions panel is shown, only allow clicking on the close button (X)
     if (state.showInstructions) {
+        state.hoveredMenuButton = -1; // No button hovered when instructions are shown
         float instrW = 820.0f;
         float instrH = 620.0f;
         float instrX = (fbW - instrW) * 0.5f;
@@ -52,18 +35,30 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
         float closeX = instrX + instrW - closeSize - 10.0f;
         float closeY = instrY + instrH - closeSize - 6.0f;
 
+        // Update hover state for close button
+        state.hoveredCloseButton = pointInRectPx(px, py, closeX, closeY, closeSize, closeSize);
+
         if (click) {
             // Click on close button (X) = close it
-            if (pointInRectPx(px, py, closeX, closeY, closeSize, closeSize)) {
+            if (state.hoveredCloseButton) {
                 state.showInstructions = false;
             }
         }
         return true; // Menu is handling input
     }
 
+    state.hoveredCloseButton = false;
+
+    // Update hover state
+    state.hoveredMenuButton = -1;
+    if (menu.btn1.contains(px, py)) state.hoveredMenuButton = 0;
+    else if (menu.btn2.contains(px, py)) state.hoveredMenuButton = 1;
+    else if (menu.btn3.contains(px, py)) state.hoveredMenuButton = 2;
+    else if (menu.btn4.contains(px, py)) state.hoveredMenuButton = 3;
+
     if (click) {
         // Normal Mode button
-        if (pointInRectPx(px, py, btnX, btn1Y, btnW, btnH)) {
+        if (menu.btn1.contains(px, py)) {
             state.showInstructions = false;
             state.gameType = GameType::NORMAL;
             state.testOneBrick = false;
@@ -71,7 +66,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             return true; // Signal that game should init
         }
         // Endless Mode button
-        if (pointInRectPx(px, py, btnX, btn2Y, btnW, btnH)) {
+        if (menu.btn2.contains(px, py)) {
             state.showInstructions = false;
             state.gameType = GameType::ENDLESS;
             state.wave = 1;
@@ -80,12 +75,12 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             return true; // Signal that game should init
         }
         // Instructions button
-        if (pointInRectPx(px, py, btnX, btn3Y, btnW, btnH)) {
+        if (menu.btn3.contains(px, py)) {
             state.showInstructions = true;
             return true;
         }
         // Test feature (click the "4" badge): Start a one-brick test level.
-        if (pointInRectPx(px, py, testX, testY, testW, testH)) {
+        if (menu.testBadge.contains(px, py)) {
             state.showInstructions = false;
             state.gameType = GameType::NORMAL;
             state.testOneBrick = true;
@@ -93,7 +88,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             return true;
         }
         // Exit button
-        if (pointInRectPx(px, py, btnX, btn4Y, btnW, btnH)) {
+        if (menu.btn4.contains(px, py)) {
             window.requestClose();
             return true;
         }
