@@ -545,6 +545,17 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         float backX = panelX + 20.0f * uiS;
         float backY = panelY + 15.0f * uiS;
         drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+    } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
+        // Instructions screen: CONTROLS, POWERUPS, BACK (buttons open the detailed overlay panel)
+        drawButton(0, btnX, btn1Y - 50.0f, btnW, btnH, "CONTROLS", glm::vec3(0.3f, 0.6f, 0.7f), "View");
+        drawButton(1, btnX, btn2Y - 50.0f, btnW, btnH, "POWERUPS", glm::vec3(0.6f, 0.3f, 0.7f), "View");
+
+        // BACK button
+        float backW = 120.0f * uiS;
+        float backH = 50.0f * uiS;
+        float backX = panelX + 20.0f * uiS;
+        float backY = panelY + 15.0f * uiS;
+        drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
     }
 
     // Small clickable "4" badge for the one-brick test mode (only on MAIN menu, bottom-right corner)
@@ -593,11 +604,21 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
 
     // Show instructions if toggled
     if (state.showInstructions) {
-        // Instructions panel (larger to fit powerup descriptions)
-        float instrW = 820.0f;
-        float instrH = 620.0f;
-        float instrX = (ctx.fbW - instrW) * 0.5f;
-        float instrY = (ctx.fbH - instrH) * 0.5f;
+        // Instructions overlay (keep similar "menu panel" ratio; not fullscreen)
+        // Slightly smaller on non-fullscreen / smaller windows (keep nice gap like the menu panel).
+        // Fullscreen typically hits the caps below, so it stays "perfect".
+        float instrW = std::min(980.0f, (float)ctx.fbW * 0.75f);
+        float instrH = std::min(690.0f, (float)ctx.fbH * 0.72f);
+        float instrX = ((float)ctx.fbW - instrW) * 0.5f;
+        float instrY = std::max(40.0f, ((float)ctx.fbH - instrH) * 0.5f - 60.0f);
+
+        // Keep the overlay BELOW the big BREAKOUT title (match OverlayLayout.cpp spacing).
+        const float titlePanelGap = 26.0f;
+        float maxTopY = L.titleY - titlePanelGap; // y-up
+        if (instrY + instrH > maxTopY) {
+            instrY = maxTopY - instrH;
+            instrY = std::max(40.0f, instrY);
+        }
 
         ctx.renderer.drawUIQuad(instrX, instrY, instrW, instrH, glm::vec4(0.05f, 0.05f, 0.1f, 0.98f));
 
@@ -612,8 +633,8 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         ctx.renderer.drawUIQuad(instrX - borderThickness, instrY, borderThickness, instrH, instrBorder);
         ctx.renderer.drawUIQuad(instrX + instrW, instrY, borderThickness, instrH, instrBorder);
 
-        // Instructions title with glow + underline
-        std::string instrTitle = "HOW TO PLAY";
+        // Title with glow + underline (tab-aware)
+        std::string instrTitle = (state.instructionsTab == 0) ? "CONTROLS" : "POWERUPS";
         float instrTitleScale = 1.6f;
         float instrTitleW = ctx.renderer.measureUITextWidth(instrTitle, instrTitleScale);
         float instrTitleX = instrX + (instrW - instrTitleW) * 0.5f;
@@ -634,120 +655,126 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         glm::vec3 neonBar = hsv2rgb(hueBar, 0.85f, 1.0f);
         ctx.renderer.drawUIQuad(instrTitleX, instrTitleY - 6.0f, barW, barH, glm::vec4(neonBar, 1.0f));
 
-        // Basic Controls section
-        float textY = instrY + instrH - 100.0f;
-        float textX = instrX + 24.0f;
-        float lineGap = 28.0f;
-        float sectionGap = 16.0f;
+        if (state.instructionsTab == 0) {
+            // Controls list (single panel; no inner "card", no duplicate title, no tip)
+            float pad = 44.0f;
+            float x = instrX + pad;
+            float y = instrY + instrH - 132.0f;
 
-        std::string ctrlTitle = "Controls";
-        ctx.renderer.drawUIText(textX, textY, ctrlTitle, 0.85f, glm::vec3(1.0f, 0.95f, 0.70f));
-        ctx.renderer.drawUIQuad(textX, textY - 6.0f, 140.0f, 3.0f, glm::vec4(1.0f, 0.95f, 0.70f, 1.0f));
-        textY -= lineGap;
+            float lineGap = 68.0f;
+            float badgeScale = 1.20f;
+            float descScale = 1.10f;
+            struct CtrlItem { std::string key; std::string desc; };
+            std::vector<CtrlItem> controls = {
+                {"A / D",   "Move paddle"},
+                {"ARROWS",  "Move paddle"},
+                {"SPACE",   "Launch ball"},
+                {"ESC",     "Pause / Resume"},
+                {"1 / 2",   "Change camera"}
+            };
 
-        struct CtrlItem { std::string key; std::string desc; };
-        std::vector<CtrlItem> controls = {
-            {"A / D", "Move paddle"},
-            {"ARROWS", "Move paddle"},
-            {"SPACE", "Launch ball"},
-            {"ESC", "Pause / Resume"},
-            {"1 / 2", "Change camera"}
-        };
-        for (const auto& item : controls) {
-            float badgeScale = 0.65f;
-            float badgeW = ctx.renderer.measureUITextWidth(item.key, badgeScale) + 24.0f;
-            float badgeH = ctx.renderer.getUIFontLineHeight(badgeScale) + 16.0f;
-            drawKeyBadge(ctx.renderer, textX, textY - badgeH * 0.3f, item.key, badgeScale, ctx.time.now());
-            float descX = textX + badgeW + 18.0f;
-            ctx.renderer.drawUIText(descX, textY, item.desc, 0.65f, glm::vec3(0.8f, 0.9f, 1.0f));
-            textY -= lineGap;
+            // Align descriptions (consistent key column width)
+            float maxKeyW = 0.0f;
+            for (const auto& it : controls) {
+                maxKeyW = std::max(maxKeyW, ctx.renderer.measureUITextWidth(it.key, badgeScale));
+            }
+            float badgeW = maxKeyW + 38.0f;
+            float descX = x + badgeW + 28.0f;
+
+            for (const auto& it : controls) {
+                drawKeyBadge(ctx.renderer, x, y - 18.0f, it.key, badgeScale, ctx.time.now());
+                ctx.renderer.drawUIText(descX, y, it.desc, descScale, glm::vec3(0.86f, 0.94f, 1.0f));
+                y -= lineGap;
+            }
         }
 
-        textY -= sectionGap;
+        if (state.instructionsTab == 1) {
+            float textY = instrY + instrH - 100.0f;
+            float textX = instrX + 24.0f;
+            float lineGap = 28.0f;
+            float sectionGap = 16.0f;
 
-        // Power-ups section
-        std::string puTitle = "Power-ups — Good";
-        ctx.renderer.drawUIText(textX, textY, puTitle, 0.85f, glm::vec3(0.35f, 1.0f, 0.35f));
-        ctx.renderer.drawUIQuad(textX, textY - 6.0f, 180.0f, 3.0f, glm::vec4(0.35f, 1.0f, 0.35f, 1.0f));
-        textY -= lineGap;
-
-        std::vector<std::string> goodPowerups = {
-            "Green (EXPAND): Makes paddle wider for 7 seconds",
-            "Blue (EXTRA BALL): Spawns 3 additional balls",
-            "Red (EXTRA LIFE): Adds +1 life",
-            "Orange (FIREBALL): Turn ball into one-shot fireball with AoE"
-        };
-
-        for (const auto& line : goodPowerups) {
-            ctx.renderer.drawUIQuad(textX, textY + 4.0f, 8.0f, 8.0f, glm::vec4(0.35f, 1.0f, 0.35f, 1.0f));
-            ctx.renderer.drawUIText(textX + 14.0f, textY, line, 0.62f, glm::vec3(0.8f, 1.0f, 0.85f));
+            // Power-ups section
+            std::string puTitle = "Power-ups — Good";
+            ctx.renderer.drawUIText(textX, textY, puTitle, 0.85f, glm::vec3(0.35f, 1.0f, 0.35f));
+            ctx.renderer.drawUIQuad(textX, textY - 6.0f, 180.0f, 3.0f, glm::vec4(0.35f, 1.0f, 0.35f, 1.0f));
             textY -= lineGap;
+
+            std::vector<std::string> goodPowerups = {
+                "Green (EXPAND): Makes paddle wider for 7 seconds",
+                "Blue (EXTRA BALL): Spawns 3 additional balls",
+                "Red (EXTRA LIFE): Adds +1 life",
+                "Orange (FIREBALL): Turn ball into one-shot fireball with AoE"
+            };
+
+            for (const auto& line : goodPowerups) {
+                ctx.renderer.drawUIQuad(textX, textY + 4.0f, 8.0f, 8.0f, glm::vec4(0.35f, 1.0f, 0.35f, 1.0f));
+                ctx.renderer.drawUIText(textX + 14.0f, textY, line, 0.62f, glm::vec3(0.8f, 1.0f, 0.85f));
+                textY -= lineGap;
+            }
+
+            textY -= sectionGap;
+
+            // Curses section
+            std::string cursTitle = "Power-ups — Bad";
+            ctx.renderer.drawUIText(textX, textY, cursTitle, 0.85f, glm::vec3(1.0f, 0.20f, 0.20f));
+            ctx.renderer.drawUIQuad(textX, textY - 6.0f, 180.0f, 3.0f, glm::vec4(1.0f, 0.20f, 0.20f, 1.0f));
+            textY -= lineGap;
+
+            std::vector<std::string> curses = {
+                "Brown (SLOW): Slows paddle movement for 7 seconds",
+                "Magenta (REVERSE): Inverts left/right controls for ~4s",
+                "Yellow (TINY): Shrinks paddle for 6 seconds",
+                "Cyan (SHIELD): Barrier behind paddle saves balls for 6.5s"
+            };
+
+            for (const auto& line : curses) {
+                ctx.renderer.drawUIQuad(textX, textY + 4.0f, 8.0f, 8.0f, glm::vec4(1.0f, 0.35f, 0.35f, 1.0f));
+                ctx.renderer.drawUIText(textX + 14.0f, textY, line, 0.62f, glm::vec3(1.0f, 0.9f, 0.9f));
+                textY -= lineGap;
+            }
         }
 
-        textY -= sectionGap;
+        // BACK button (bottom-left; replaces the old X)
+        {
+            bool hovered = state.hoveredCloseButton;
+            float backW = 150.0f;
+            float backH = 56.0f;
+            float backX = instrX + 22.0f;
+            float backY = instrY + 16.0f;
 
-        // Curses section
-        std::string cursTitle = "Power-ups — Bad";
-        ctx.renderer.drawUIText(textX, textY, cursTitle, 0.85f, glm::vec3(1.0f, 0.20f, 0.20f));
-        ctx.renderer.drawUIQuad(textX, textY - 6.0f, 180.0f, 3.0f, glm::vec4(1.0f, 0.20f, 0.20f, 1.0f));
-        textY -= lineGap;
+            float s = hovered ? 1.06f : 1.0f;
+            float cx = backX + backW * 0.5f;
+            float cy = backY + backH * 0.5f;
+            float w = backW * s;
+            float h = backH * s;
+            float x = cx - w * 0.5f;
+            float y = cy - h * 0.5f;
 
-        std::vector<std::string> curses = {
-            "Brown (SLOW): Slows paddle movement for 7 seconds",
-            "Magenta (REVERSE): Inverts left/right controls for ~4s",
-            "Yellow (TINY): Shrinks paddle for 6 seconds",
-            "Cyan (SHIELD): Barrier behind paddle saves balls for 6.5s"
-        };
+            float sh = hovered ? 6.0f : 3.0f;
+            ctx.renderer.drawUIQuad(x + sh, y - sh, w, h, glm::vec4(0,0,0, hovered ? 0.60f : 0.50f));
+            glm::vec3 base(0.10f, 0.10f, 0.16f);
+            glm::vec3 col = base * (hovered ? 1.25f : 1.0f);
+            ctx.renderer.drawUIQuad(x, y, w, h, glm::vec4(col, 0.95f));
 
-        for (const auto& line : curses) {
-            ctx.renderer.drawUIQuad(textX, textY + 4.0f, 8.0f, 8.0f, glm::vec4(1.0f, 0.35f, 0.35f, 1.0f));
-            ctx.renderer.drawUIText(textX + 14.0f, textY, line, 0.62f, glm::vec3(1.0f, 0.9f, 0.9f));
-            textY -= lineGap;
+            float bt = 2.5f;
+            float hue = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
+            glm::vec3 neon = hsv2rgb(hue, 0.85f, 1.0f);
+            glm::vec4 bcol(neon, hovered ? 1.0f : 0.80f);
+            ctx.renderer.drawUIQuad(x - bt, y - bt, w + 2*bt, bt, bcol);
+            ctx.renderer.drawUIQuad(x - bt, y + h,  w + 2*bt, bt, bcol);
+            ctx.renderer.drawUIQuad(x - bt, y, bt, h, bcol);
+            ctx.renderer.drawUIQuad(x + w,  y, bt, h, bcol);
+
+            std::string back = "< BACK";
+            float scale = 0.86f;
+            float tw = ctx.renderer.measureUITextWidth(back, scale);
+            float th = ctx.renderer.getUIFontLineHeight(scale);
+            float tx = x + (w - tw) * 0.5f - 6.0f;
+            float ty = y + (h - th) * 0.5f;
+            ctx.renderer.drawUIText(tx + 1.0f, ty - 1.0f, back, scale, glm::vec4(0,0,0,0.55f));
+            ctx.renderer.drawUIText(tx, ty, back, scale, glm::vec4(1,1,1,1));
         }
-
-        // Close button (X) in top-right corner of panel
-        float closeSize = 44.0f;
-        float closeX = instrX + instrW - closeSize - 10.0f;
-        float closeY = instrY + instrH - closeSize - 6.0f;
-        
-        // Apply hover effects
-        bool hovered = state.hoveredCloseButton;
-        float hoverBrightness = hovered ? 1.3f : 1.0f;
-        glm::vec3 closeColor(0.8f, 0.2f, 0.2f);
-        closeColor *= hoverBrightness;
-
-        // Shadow (larger on hover)
-        float shadowOffset = hovered ? 4.0f : 2.0f;
-        ctx.renderer.drawUIQuad(closeX + shadowOffset, closeY - shadowOffset, closeSize, closeSize, 
-                               glm::vec4(0.0f, 0.0f, 0.0f, hovered ? 0.6f : 0.5f));
-
-        // Button background with gradient
-        ctx.renderer.drawUIQuad(closeX, closeY, closeSize, closeSize, 
-                               glm::vec4(closeColor.r, closeColor.g, closeColor.b, 0.95f));
-        ctx.renderer.drawUIQuad(closeX, closeY + closeSize * 0.5f, closeSize, closeSize * 0.5f, 
-                               glm::vec4(closeColor.r * 0.7f, closeColor.g * 0.7f, closeColor.b * 0.7f, 0.3f));
-
-        // Border (brighter and thicker on hover)
-        float borderThick = hovered ? 2.5f : 1.5f;
-        glm::vec4 borderCol = hovered ? glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) : glm::vec4(0.0f, 0.0f, 0.0f, 0.3f);
-        ctx.renderer.drawUIQuad(closeX, closeY, closeSize, borderThick, borderCol);
-        ctx.renderer.drawUIQuad(closeX, closeY + closeSize - borderThick, closeSize, borderThick, borderCol);
-        ctx.renderer.drawUIQuad(closeX, closeY, borderThick, closeSize, borderCol);
-        ctx.renderer.drawUIQuad(closeX + closeSize - borderThick, closeY, borderThick, closeSize, borderCol);
-        
-        // Draw white X symbol
-        std::string closeSymbol = "X";
-        float closeSymScale = 1.8f;
-        float closeSymW = ctx.renderer.measureUITextWidth(closeSymbol, closeSymScale);
-        float closeSymH = ctx.renderer.getUIFontLineHeight(closeSymScale);
-        float closeSymX = closeX + (closeSize - closeSymW) * 0.5f;
-        float closeSymY = closeY + (closeSize - closeSymH) * 0.5f;
-
-        // Shadow on text (stronger on hover)
-        float textShadowStrength = hovered ? 0.8f : 0.6f;
-        ctx.renderer.drawUIText(closeSymX + 1.0f, closeSymY - 1.0f, closeSymbol, closeSymScale, 
-                               glm::vec3(0, 0, 0) * textShadowStrength);
-        ctx.renderer.drawUIText(closeSymX, closeSymY, closeSymbol, closeSymScale, glm::vec3(1.0f, 1.0f, 1.0f));
     }
 
     ctx.renderer.endUI();

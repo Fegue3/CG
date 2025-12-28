@@ -26,6 +26,7 @@ enum class GameType {
 enum class MenuScreen {
     MAIN,       // Main menu: Play, Instructions, Options, Exit
     PLAY_MODES, // Play modes submenu: Normal, Endless, Rogue, Levels, Back
+    INSTRUCTIONS, // Instructions screen: Controls, Powerups, Back
     OPTIONS     // Options submenu: Sound, Graphics, Back
 };
 
@@ -116,9 +117,10 @@ struct GameState {
     int selectedMenuOption = 0;
     int hoveredMenuButton = -1; // -1 = none, 0-3 for main menu buttons
     int hoveredOverlayButton = -1; // -1 = none, 0 = left button, 1 = right button (pause/gameover/win)
-    bool hoveredCloseButton = false; // Instructions close button (X)
+    bool hoveredCloseButton = false; // Instructions overlay BACK button (bottom-left)
     bool hoveredTestBadge = false; // ONE BRICK test badge
     bool showInstructions = false;
+    int instructionsTab = 0; // 0 = Controls, 1 = Powerups
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
 
     // Cached menu layout (computed using real font metrics to keep input + render aligned).

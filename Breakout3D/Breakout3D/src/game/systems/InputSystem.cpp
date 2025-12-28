@@ -6,6 +6,7 @@
 #include "game/ui/OverlayLayout.hpp"
 #include "engine/Window.hpp"
 #include <glm/glm.hpp>
+#include <algorithm>
 
 namespace game {
 
@@ -22,24 +23,34 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     // Get cached menu layout (computed using real font metrics; must match UIRender.cpp)
     const ui::MenuLayout& menu = state.menuLayout;
 
-    // If instructions panel is shown, only allow clicking on the close button (X)
+    // If instructions overlay is shown, only allow clicking on the BACK button (bottom-left)
     if (state.showInstructions) {
         state.hoveredMenuButton = -1; // No button hovered when instructions are shown
-        float instrW = 820.0f;
-        float instrH = 620.0f;
-        float instrX = (fbW - instrW) * 0.5f;
-        float instrY = (fbH - instrH) * 0.5f;
+        // Must match UIRender.cpp exactly
+        float instrW = std::min(980.0f, (float)fbW * 0.75f);
+        float instrH = std::min(690.0f, (float)fbH * 0.72f);
+        float instrX = ((float)fbW - instrW) * 0.5f;
+        float instrY = std::max(40.0f, ((float)fbH - instrH) * 0.5f - 60.0f);
 
-        // Close button position (X in top-right corner)
-        float closeSize = 44.0f;
-        float closeX = instrX + instrW - closeSize - 10.0f;
-        float closeY = instrY + instrH - closeSize - 6.0f;
+        // Keep the overlay BELOW the big title (match OverlayLayout.cpp spacing).
+        const float titlePanelGap = 26.0f;
+        float maxTopY = menu.titleY - titlePanelGap; // y-up
+        if (instrY + instrH > maxTopY) {
+            instrY = maxTopY - instrH;
+            instrY = std::max(40.0f, instrY);
+        }
 
-        // Update hover state for close button
-        state.hoveredCloseButton = pointInRectPx(px, py, closeX, closeY, closeSize, closeSize);
+        // BACK button position (bottom-left corner of panel)
+        float backW = 150.0f;
+        float backH = 56.0f;
+        float backX = instrX + 22.0f;
+        float backY = instrY + 16.0f;
+
+        // Update hover state for BACK button
+        state.hoveredCloseButton = pointInRectPx(px, py, backX, backY, backW, backH);
 
         if (click) {
-            // Click on close button (X) = close it
+            // Click on BACK = close overlay
             if (state.hoveredCloseButton) {
                 state.showInstructions = false;
             }
@@ -87,6 +98,23 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.hoveredMenuButton = 2; // BACK
             }
         }
+    } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
+        float offsetY = -50.0f; // Instructions buttons start lower (matches OPTIONS layout)
+        ui::Rect controlsBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
+        ui::Rect powerupsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
+
+        if (controlsBtn.contains(px, py)) state.hoveredMenuButton = 0;       // CONTROLS
+        else if (powerupsBtn.contains(px, py)) state.hoveredMenuButton = 1;  // POWERUPS
+        else {
+            float s = menu.uiScale;
+            float backW = 120.0f * s;
+            float backH = 50.0f * s;
+            float backX = menu.panelX + 20.0f * s;
+            float backY = menu.panelY + 15.0f * s;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.hoveredMenuButton = 2; // BACK
+            }
+        }
     }
 
     if (click) {
@@ -107,7 +135,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             }
             // INSTRUCTIONS button
             if (menu.btn2.contains(px, py)) {
-                state.showInstructions = true;
+                state.currentMenuScreen = MenuScreen::INSTRUCTIONS;
                 return true;
             }
             // OPTIONS button - go to options submenu
@@ -162,6 +190,31 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 return true;
             }
             // BACK button
+            float s = menu.uiScale;
+            float backW = 120.0f * s;
+            float backH = 50.0f * s;
+            float backX = menu.panelX + 20.0f * s;
+            float backY = menu.panelY + 15.0f * s;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.currentMenuScreen = MenuScreen::MAIN;
+                return true;
+            }
+        } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
+            float offsetY = -50.0f;
+            ui::Rect controlsBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
+            if (controlsBtn.contains(px, py)) {
+                state.instructionsTab = 0;
+                state.showInstructions = true;
+                return true;
+            }
+
+            ui::Rect powerupsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
+            if (powerupsBtn.contains(px, py)) {
+                state.instructionsTab = 1;
+                state.showInstructions = true;
+                return true;
+            }
+
             float s = menu.uiScale;
             float backW = 120.0f * s;
             float backH = 50.0f * s;
