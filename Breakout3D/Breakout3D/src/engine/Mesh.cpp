@@ -370,4 +370,6 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
     return mesh;
 }
 
+// Create a simple plane mesh for background
+
 } // namespace engine
