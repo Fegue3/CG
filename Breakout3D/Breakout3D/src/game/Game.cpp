@@ -153,6 +153,11 @@ void Game::update(const engine::Input& input) {
 
         const auto L = game::ui::pauseOverlay(fbW, fbH);
 
+        // Update hover state
+        m_state.hoveredOverlayButton = -1;
+        if (L.leftBtn.contains(px, py)) m_state.hoveredOverlayButton = 0;
+        else if (L.rightBtn.contains(px, py)) m_state.hoveredOverlayButton = 1;
+
         if (click) {
             // Left button: Restart
             if (L.leftBtn.contains(px, py)) {
@@ -270,6 +275,11 @@ void Game::update(const engine::Input& input) {
         bool click = input.mousePressed(engine::MouseButton::Left);
 
         const auto L = game::ui::endOverlay(fbW, fbH);
+
+        // Update hover state
+        m_state.hoveredOverlayButton = -1;
+        if (L.leftBtn.contains(px, py)) m_state.hoveredOverlayButton = 0;
+        else if (L.rightBtn.contains(px, py)) m_state.hoveredOverlayButton = 1;
 
         if (click) {
             // Left button: Restart
@@ -466,7 +476,7 @@ void Game::render() {
     // =========== MENU RENDER ===========
     if (m_state.mode == GameMode::MENU) {
         game::render::RenderContext ctx{fbW, fbH, m_time, m_renderer};
-        game::render::renderMenu(ctx, m_state);
+        game::render::renderMenu(ctx, m_state, m_assets);
         m_window.swapBuffers();
         return;
     }
