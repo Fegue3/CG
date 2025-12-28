@@ -1,5 +1,7 @@
 #pragma once
 
+namespace engine { class Renderer; }
+
 namespace game::ui {
 
 struct Rect {
@@ -60,57 +62,41 @@ inline OverlayLayout endOverlay(int fbW, int fbH) {
 }
 
 struct MenuLayout {
+    // Computed to match `game/render/UIRender.cpp` exactly.
+    float uiScale = 1.0f;
+    float panelX = 0.0f;
     float panelY = 0.0f;
+    float panelW = 0.0f;
+    float panelH = 0.0f;
+
+    // Title placement (so render + input always agree across resolutions).
+    float titleX = 0.0f;
+    float titleY = 0.0f;
+    float titleW = 0.0f;
+    float titleH = 0.0f;
+    float titleScale = 1.0f;
+
     Rect btn1; // Normal
     Rect btn2; // Endless
     Rect btn3; // Instructions
     Rect btn4; // Exit
     Rect testBadge; // One brick test
+
+    // PLAY_MODES layout: one card per mode (aligned grid), each with its own PLAY button.
+    struct ModeCard {
+        Rect card;
+        Rect playBtn;
+    };
+    ModeCard normal;
+    ModeCard endless;
+    ModeCard rogue;
+    ModeCard levels;
+    Rect backBtn;
 };
 
-// Calculate menu panel Y position (must match UIRender.cpp logic)
-inline MenuLayout calculateMenuLayout(int fbW, int fbH) {
-    MenuLayout L;
-    
-    const float panelW = 500.0f;
-    const float panelH = 480.0f;
-    const float panelX = (fbW - panelW) * 0.5f;
-    
-    const float topMargin = 28.0f;
-    const float bottomMargin = 24.0f;
-    const float titlePanelGap = 26.0f;
-    
-    // Approximate title height (measured from actual rendering at 1280x900)
-    // This should match the actual titleH calculated in UIRender.cpp
-    const float titleH = 175.0f; // Real value from renderer
-    float titleY = (float)fbH - topMargin - titleH;
-    
-    // Panel sits below the title
-    float panelY = titleY - titlePanelGap - panelH;
-    if (panelY < bottomMargin) {
-        panelY = bottomMargin;
-    }
-    
-    L.panelY = panelY;
-    
-    // Button dimensions
-    const float btnW = 200.0f;
-    const float btnH = 70.0f;
-    const float btnX = panelX + (panelW - btnW) * 0.5f;
-    
-    // Button positions (from top to bottom)
-    L.btn1 = Rect{btnX, panelY + 360.0f, btnW, btnH}; // Normal
-    L.btn2 = Rect{btnX, panelY + 250.0f, btnW, btnH}; // Endless
-    L.btn3 = Rect{btnX, panelY + 140.0f, btnW, btnH}; // Instructions
-    L.btn4 = Rect{btnX, panelY + 30.0f, btnW, btnH};  // Exit
-    
-    // Test badge inside Exit button
-    const float testW = 48.0f;
-    const float testH = btnH - 16.0f;
-    L.testBadge = Rect{btnX + btnW - 8.0f - testW, panelY + 30.0f + 8.0f, testW, testH};
-    
-    return L;
-}
+// Must match visuals in `game/render/UIRender.cpp`.
+// NOTE: implemented in `src/game/ui/OverlayLayout.cpp` to avoid pulling the full Renderer into headers.
+MenuLayout calculateMenuLayout(engine::Renderer& renderer, int fbW, int fbH);
 
 } // namespace game::ui
 
