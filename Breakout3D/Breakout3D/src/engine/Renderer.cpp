@@ -8,6 +8,11 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "external/stb_truetype.h"
 
+struct UiVertex {
+    float x, y, z;
+    float u, v;
+};
+
 static void setMat4(GLuint p, const char* n, const glm::mat4& m) {
     glUniformMatrix4fv(glGetUniformLocation(p, n), 1, GL_FALSE, &m[0][0]);
 }
@@ -118,6 +123,31 @@ bool Renderer::init() {
             }
         }
     }
+    // UI buffers (single VAO/VBO reused for quads/triangles/text).
+    if (!m_uiVao) {
+        glGenVertexArrays(1, &m_uiVao);
+        glGenBuffers(1, &m_uiVbo);
+
+        glBindVertexArray(m_uiVao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_uiVbo);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+
+        // aPos: location 0
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(UiVertex), (void*)offsetof(UiVertex, x));
+
+        // aNormal: location 1 (constant normal for UI; vertex shader still computes vNormal)
+        glDisableVertexAttribArray(1);
+        glVertexAttrib3f(1, 0.0f, 0.0f, 1.0f);
+
+        // aUV: location 2
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(UiVertex), (void*)offsetof(UiVertex, u));
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+    }
+
     return true;
 }
 
@@ -129,6 +159,15 @@ void Renderer::shutdown() {
     }
     delete[] (stbtt_bakedchar*)m_uiFontChars;
     m_uiFontChars = nullptr;
+
+    if (m_uiVbo) {
+        glDeleteBuffers(1, &m_uiVbo);
+        m_uiVbo = 0;
+    }
+    if (m_uiVao) {
+        glDeleteVertexArrays(1, &m_uiVao);
+        m_uiVao = 0;
+    }
 }
 
 void Renderer::beginFrame(int fbW, int fbH) {
@@ -309,31 +348,22 @@ void Renderer::drawUIQuad(float x, float y, float w, float h, const glm::vec4& c
         setVec2(p, "uMaskMax", glm::vec2(0.0f));
     }
 
-    GLuint VAO, VBO, EBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-
-    float vertices[] = {
-        -0.5f,-0.5f,0,  0.5f,-0.5f,0,
-         0.5f, 0.5f,0, -0.5f, 0.5f,0
+    // Two triangles (unit quad centered at origin), UVs unused for solid UI.
+    UiVertex verts[6] = {
+        {-0.5f, -0.5f, 0.0f, 0.0f, 0.0f},
+        { 0.5f, -0.5f, 0.0f, 0.0f, 0.0f},
+        { 0.5f,  0.5f, 0.0f, 0.0f, 0.0f},
+        {-0.5f, -0.5f, 0.0f, 0.0f, 0.0f},
+        { 0.5f,  0.5f, 0.0f, 0.0f, 0.0f},
+        {-0.5f,  0.5f, 0.0f, 0.0f, 0.0f},
     };
-    unsigned int indices[] = {0,1,2, 0,2,3};
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);
-    glEnableVertexAttribArray(0);
-
-    glDrawElements(GL_TRIANGLES,6,GL_UNSIGNED_INT,0);
-
-    glDeleteBuffers(1,&VBO);
-    glDeleteBuffers(1,&EBO);
-    glDeleteVertexArrays(1,&VAO);
+    glBindVertexArray(m_uiVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_uiVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 }
 
 void Renderer::drawUITriangle(const glm::vec2& p0, const glm::vec2& p1, const glm::vec2& p2, const glm::vec4& color) {
@@ -354,27 +384,18 @@ void Renderer::drawUITriangle(const glm::vec2& p0, const glm::vec2& p1, const gl
 
     setInt(p, "uUseMask", 0);
 
-    GLuint VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    float vertices[] = {
-        p0.x, p0.y, 0.0f,
-        p1.x, p1.y, 0.0f,
-        p2.x, p2.y, 0.0f
+    UiVertex verts[3] = {
+        {p0.x, p0.y, 0.0f, 0.0f, 0.0f},
+        {p1.x, p1.y, 0.0f, 0.0f, 0.0f},
+        {p2.x, p2.y, 0.0f, 0.0f, 0.0f},
     };
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
+    glBindVertexArray(m_uiVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_uiVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_DYNAMIC_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    glDeleteBuffers(1, &VBO);
-    glDeleteVertexArrays(1, &VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 }
 
 void Renderer::drawUIText(float x, float y, const std::string& text, float scale, const glm::vec4& color) {
@@ -422,6 +443,10 @@ void Renderer::drawUIText(float x, float y, const std::string& text, float scale
     float penXDown = originXDown; // in baked-font pixels
     float penYDown = baselineYDown;
 
+    // Batch all glyph quads into a single dynamic buffer update + one draw call.
+    std::vector<UiVertex> verts;
+    verts.reserve(text.size() * 6);
+
     for (unsigned char uc : text) {
         if (uc < 32 || uc >= 128) {
             penXDown += (m_uiFontPixelHeight * 0.4f) * effectiveScale;
@@ -458,40 +483,24 @@ void Renderer::drawUIText(float x, float y, const std::string& text, float scale
         float v0 = q.t0;
         float v1 = q.t1;
 
-        GLuint VAO, VBO, EBO;
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-        glGenBuffers(1, &EBO);
+        // Emit two triangles in absolute UI coordinates (uM = identity).
+        // bottom-left, bottom-right, top-right, bottom-left, top-right, top-left
+        verts.push_back(UiVertex{quadX,          quadY,          0.0f, s0, v1});
+        verts.push_back(UiVertex{quadX + quadW,  quadY,          0.0f, s1, v1});
+        verts.push_back(UiVertex{quadX + quadW,  quadY + quadH,  0.0f, s1, v0});
+        verts.push_back(UiVertex{quadX,          quadY,          0.0f, s0, v1});
+        verts.push_back(UiVertex{quadX + quadW,  quadY + quadH,  0.0f, s1, v0});
+        verts.push_back(UiVertex{quadX,          quadY + quadH,  0.0f, s0, v0});
+    }
 
-        float verts[] = {
-            // pos                // uv
-            -0.5f, -0.5f, 0.0f,   s0, v1, // bottom-left
-             0.5f, -0.5f, 0.0f,   s1, v1, // bottom-right
-             0.5f,  0.5f, 0.0f,   s1, v0, // top-right
-            -0.5f,  0.5f, 0.0f,   s0, v0  // top-left
-        };
-        unsigned int inds[] = {0,1,2, 0,2,3};
-
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(inds), inds, GL_STATIC_DRAW);
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void*)(3*sizeof(float)));
-        glEnableVertexAttribArray(2);
-
-        glm::mat4 M = glm::translate(glm::mat4(1.0f), glm::vec3(quadX + quadW*0.5f, quadY + quadH*0.5f, 0.0f));
-        M = glm::scale(M, glm::vec3(quadW, quadH, 1.0f));
-        setMat4(p, "uM", M);
-
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-        glDeleteBuffers(1, &VBO);
-        glDeleteBuffers(1, &EBO);
-        glDeleteVertexArrays(1, &VAO);
+    if (!verts.empty()) {
+        setMat4(p, "uM", glm::mat4(1.0f));
+        glBindVertexArray(m_uiVao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_uiVbo);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(verts.size() * sizeof(UiVertex)), verts.data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
     }
 }
 

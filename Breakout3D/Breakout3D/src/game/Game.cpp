@@ -10,6 +10,7 @@
 #include "game/render/RenderContext.hpp"
 #include "game/render/UIRender.hpp"
 #include "game/render/WorldRender.hpp"
+#include "game/ui/OverlayLayout.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -66,6 +67,7 @@ void Game::init() {
 void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
+#ifdef BREAKOUT3D_DEBUG
     // Debug: spawn specific powerups at the paddle (so you're not waiting on RNG).
     // K4: TINY, K5: FIREBALL, K6: SHIELD, K7: REVERSE
     if (m_state.mode == GameMode::PLAYING) {
@@ -86,6 +88,7 @@ void Game::update(const engine::Input& input) {
             m_state.powerups.push_back(p);
         }
     }
+#endif
 
     // =========== MENU LOGIC ===========
     if (m_state.mode == GameMode::MENU) {
@@ -148,27 +151,16 @@ void Game::update(const engine::Input& input) {
         float py = (float)fbH - py_raw;
         bool click = input.mousePressed(engine::MouseButton::Left);
 
-        // Calculate button positions (matching render layout)
-        float panelW = 450.0f;
-        float panelH = 280.0f; // Taller to fit PAUSED text + buttons
-        float panelX = (fbW - panelW) * 0.5f;
-        float panelY = (fbH - panelH) * 0.5f;
-        
-        float btnW = 140.0f;
-        float btnH = 60.0f;
-        float btnGap = 50.0f;
-        float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
-        float btnX_right = btnX_left + btnW + btnGap;
-        float btnY = panelY + 40.0f; // Position at bottom of panel
+        const auto L = game::ui::pauseOverlay(fbW, fbH);
 
         if (click) {
             // Left button: Restart
-            if (px >= btnX_left && px <= btnX_left + btnW && py >= btnY && py <= btnY + btnH) {
+            if (L.leftBtn.contains(px, py)) {
                 init();
                 return;
             }
             // Right button: Back to Menu
-            if (px >= btnX_right && px <= btnX_right + btnW && py >= btnY && py <= btnY + btnH) {
+            if (L.rightBtn.contains(px, py)) {
                 m_state.mode = GameMode::MENU;
                 m_state.showInstructions = false;
                 return;
@@ -177,6 +169,7 @@ void Game::update(const engine::Input& input) {
         return;
     }
 
+#ifdef BREAKOUT3D_DEBUG
     // Debug key for endless mode
     if (m_state.gameType == GameType::ENDLESS && input.keyPressed(engine::Key::K3)) {
         InitSystem::spawnIncrementalBricks(m_state, m_cfg, 12, m_state.wave);
@@ -184,6 +177,7 @@ void Game::update(const engine::Input& input) {
         m_state.endlessSpawnCooldown = 0.5f;
         m_state.endlessAutoTimer = 0.0f;
     }
+#endif
 
     // Update timers
     if (m_state.brickHitCooldown > 0.0f)
@@ -275,26 +269,16 @@ void Game::update(const engine::Input& input) {
         float py = (float)fbH - py_raw;
         bool click = input.mousePressed(engine::MouseButton::Left);
 
-        float panelW = 450.0f;
-        float panelH = 200.0f;
-        float panelX = (fbW - panelW) * 0.5f;
-        float panelY = (fbH - panelH) * 0.5f;
-        
-        float btnW = 140.0f;
-        float btnH = 60.0f;
-        float btnGap = 50.0f;
-        float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
-        float btnX_right = btnX_left + btnW + btnGap;
-        float btnY = panelY + 40.0f;
+        const auto L = game::ui::endOverlay(fbW, fbH);
 
         if (click) {
             // Left button: Restart
-            if (px >= btnX_left && px <= btnX_left + btnW && py >= btnY && py <= btnY + btnH) {
+            if (L.leftBtn.contains(px, py)) {
                 init();
                 return;
             }
             // Right button: Back to Menu
-            if (px >= btnX_right && px <= btnX_right + btnW && py >= btnY && py <= btnY + btnH) {
+            if (L.rightBtn.contains(px, py)) {
                 m_state.mode = GameMode::MENU;
                 m_state.showInstructions = false;
                 return;

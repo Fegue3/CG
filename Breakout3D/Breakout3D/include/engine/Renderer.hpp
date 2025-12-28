@@ -37,6 +37,10 @@ public:
 private:
     Shader m_shader;
 
+    // Reusable UI geometry buffers (avoid per-draw VAO/VBO churn).
+    GLuint m_uiVao = 0;
+    GLuint m_uiVbo = 0;
+
     glm::mat4 m_V{1.0f}, m_P{1.0f};
     glm::vec3 m_camPos{0,0,0};
 

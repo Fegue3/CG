@@ -3,6 +3,7 @@
 #include "game/GameConfig.hpp"
 #include "game/GameState.hpp"
 #include "game/effects/WinFinisher.hpp"
+#include "game/ui/OverlayLayout.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -592,17 +593,12 @@ void renderUI(const RenderContext& ctx, const GameState& state, const GameConfig
 
     // Overlay (Pause / Game Over / Win) — draw LAST so it overlaps everything (danger, HUD, etc.)
     if (state.mode != GameMode::PLAYING) {
-        float panelW = 650.0f;
-        float panelH = 260.0f;
-        float panelX = (ctx.fbW - panelW) * 0.5f;
-        float panelY = (ctx.fbH - panelH) * 0.5f;
-
         if (state.mode == GameMode::PAUSED) {
-            // Calculate panel and button positions
-            float panelW2 = 650.0f;
-            float panelH2 = 320.0f; // Taller to fit bigger PAUSED text + buttons
-            float panelX2 = (ctx.fbW - panelW2) * 0.5f;
-            float panelY2 = (ctx.fbH - panelH2) * 0.5f;
+            const auto L = game::ui::pauseOverlay(ctx.fbW, ctx.fbH);
+            float panelW2 = L.panel.w;
+            float panelH2 = L.panel.h;
+            float panelX2 = L.panel.x;
+            float panelY2 = L.panel.y;
 
             // Full screen masked overlay (dimmed outside, clear inside)
             glm::vec2 maskMin(panelX2, panelY2);
@@ -623,12 +619,11 @@ void renderUI(const RenderContext& ctx, const GameState& state, const GameConfig
             ctx.renderer.drawUIText(tx, ty, msg, scale, glm::vec3(1, 1, 1));
 
             // Buttons (Restart and Menu)
-            float btnW = 140.0f;
-            float btnH = 60.0f;
-            float btnGap = 50.0f;
-            float btnX_left = panelX2 + (panelW2 - 2*btnW - btnGap) * 0.5f;
-            float btnX_right = btnX_left + btnW + btnGap;
-            float btnY = panelY2 + 40.0f;
+            float btnX_left = L.leftBtn.x;
+            float btnY = L.leftBtn.y;
+            float btnW = L.leftBtn.w;
+            float btnH = L.leftBtn.h;
+            float btnX_right = L.rightBtn.x;
 
             ctx.renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
             ctx.renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
@@ -644,6 +639,12 @@ void renderUI(const RenderContext& ctx, const GameState& state, const GameConfig
             ctx.renderer.drawUIText(btnX_left + (btnW - ltw) * 0.5f,  btnY + (btnH - lth) * 0.5f, leftLabel, btnLabelScale, glm::vec3(1, 1, 1));
             ctx.renderer.drawUIText(btnX_right + (btnW - rtw) * 0.5f, btnY + (btnH - lth) * 0.5f, rightLabel, btnLabelScale, glm::vec3(1, 1, 1));
         } else {
+            const auto L = game::ui::endOverlay(ctx.fbW, ctx.fbH);
+            float panelW = L.panel.w;
+            float panelH = L.panel.h;
+            float panelX = L.panel.x;
+            float panelY = L.panel.y;
+
             // Full screen masked overlay for Game Over / Win
             glm::vec2 maskMin(panelX, panelY);
             glm::vec2 maskMax(panelX + panelW, panelY + panelH);
@@ -661,12 +662,11 @@ void renderUI(const RenderContext& ctx, const GameState& state, const GameConfig
             ctx.renderer.drawUIText(tx, ty, title, titleScale, glm::vec3(1, 1, 1));
 
             // Buttons
-            float btnW = 140.0f;
-            float btnH = 60.0f;
-            float btnGap = 50.0f;
-            float btnX_left = panelX + (panelW - 2*btnW - btnGap) * 0.5f;
-            float btnX_right = btnX_left + btnW + btnGap;
-            float btnY = panelY + 40.0f;
+            float btnX_left = L.leftBtn.x;
+            float btnY = L.leftBtn.y;
+            float btnW = L.leftBtn.w;
+            float btnH = L.leftBtn.h;
+            float btnX_right = L.rightBtn.x;
 
             ctx.renderer.drawUIQuad(btnX_left, btnY, btnW, btnH, glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
             ctx.renderer.drawUIQuad(btnX_right, btnY, btnW, btnH, glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));

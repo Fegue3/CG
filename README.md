@@ -7,6 +7,7 @@ A 3D Breakout game implemented in C++ with OpenGL.
 - **[PROJECT_CONTEXT.md](./docs/PROJECT_CONTEXT.md)** - Comprehensive project overview and technical details
 - **[Breakout3D_Architecture.md](./docs/Breakout3D_Architecture.md)** - Detailed architecture documentation (in Portuguese)
 - **[STRUCTURE_ANALYSIS.md](./STRUCTURE_ANALYSIS.md)** - Structure analysis and refactoring summary
+- **[CONTROLS_AND_DEBUG.md](./docs/CONTROLS_AND_DEBUG.md)** - Controls (menu/game), modes, power-ups, and debug-only keybinds
 
 ## Quick Start
 

@@ -3,9 +3,9 @@ SHELL := /bin/sh
 # --------- dirs ----------
 SRC_DIR := src
 INC_DIR := include
-OBJ_DIR := obj
+OBJ_DIR ?= obj
 
-EXE := breakout3d
+EXE ?= breakout3d
 
 # --------- compiler ----------
 CXX := g++
@@ -22,11 +22,11 @@ ifeq ($(SYSTEM_UNAME),Darwin)
 endif
 
 # --------- sources (recursive) ----------
-SRC := $(shell find $(SRC_DIR) -name "*.cpp")
-OBJ := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
-DEP := $(OBJ:.o=.d)
+SRC = $(shell find $(SRC_DIR) -name "*.cpp")
+OBJ = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
+DEP = $(OBJ:.o=.d)
 
-.PHONY: all clean run
+.PHONY: all clean run debug
 
 all: $(EXE)
 
@@ -40,9 +40,12 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJ_DIR) $(EXE)
+	rm -rf obj obj_debug breakout3d breakout3d_debug
 
 run: $(EXE)
 	./$(EXE)
+
+debug:
+	$(MAKE) OBJ_DIR=obj_debug EXE=breakout3d_debug CXXFLAGS="$(CXXFLAGS) -O0 -g -DBREAKOUT3D_DEBUG" all
 
 -include $(DEP)
