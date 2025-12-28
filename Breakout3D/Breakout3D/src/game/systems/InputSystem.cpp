@@ -40,16 +40,21 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     float testX = btnX + btnW - 8.0f - testW;
     float testY = btn4Y + 8.0f;
 
-    // If instructions panel is shown, only allow clicking on the panel or outside to close
+    // If instructions panel is shown, only allow clicking on the close button (X)
     if (state.showInstructions) {
-        float instrW = 600.0f;
-        float instrH = 320.0f;
+        float instrW = 820.0f;
+        float instrH = 620.0f;
         float instrX = (fbW - instrW) * 0.5f;
         float instrY = (fbH - instrH) * 0.5f;
 
+        // Close button position (X in top-right corner)
+        float closeSize = 44.0f;
+        float closeX = instrX + instrW - closeSize - 10.0f;
+        float closeY = instrY + instrH - closeSize - 6.0f;
+
         if (click) {
-            // Click outside the instructions panel = close it
-            if (!pointInRectPx(px, py, instrX, instrY, instrW, instrH)) {
+            // Click on close button (X) = close it
+            if (pointInRectPx(px, py, closeX, closeY, closeSize, closeSize)) {
                 state.showInstructions = false;
             }
         }
