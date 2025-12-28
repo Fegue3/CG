@@ -17,7 +17,15 @@ enum class GameMode {
 
 enum class GameType {
     NORMAL,   // Normal mode: Win when all bricks destroyed
-    ENDLESS   // Endless mode: Infinite waves, no WIN state
+    ENDLESS,  // Endless mode: Infinite waves, no WIN state
+    ROGUE,    // Future: Rogue mode (placeholder)
+    LEVELS    // Future: Levels mode (placeholder)
+};
+
+enum class MenuScreen {
+    MAIN,       // Main menu: Play, Instructions, Options, Exit
+    PLAY_MODES, // Play modes submenu: Normal, Endless, Rogue, Levels, Back
+    OPTIONS     // Options submenu: Sound, Graphics, Back
 };
 
 // PowerUpType is now defined in game/entities/PowerUp.hpp
@@ -103,10 +111,12 @@ struct GameState {
     int currentBg = -1;
 
     // Menu state
-    int selectedMenuOption = 0; // 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
-    int hoveredMenuButton = -1; // -1 = none, 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
+    MenuScreen currentMenuScreen = MenuScreen::MAIN;
+    int selectedMenuOption = 0;
+    int hoveredMenuButton = -1; // -1 = none, 0-3 for main menu buttons
     int hoveredOverlayButton = -1; // -1 = none, 0 = left button, 1 = right button (pause/gameover/win)
     bool hoveredCloseButton = false; // Instructions close button (X)
+    bool hoveredTestBadge = false; // ONE BRICK test badge
     bool showInstructions = false;
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
     // Endless danger warning
