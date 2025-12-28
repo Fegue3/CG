@@ -1,0 +1,10 @@
+# Object files
+obj/
+obj_debug/
+
+# Executables
+breakout3d
+breakout3d_debug
+
+# Dependency files
+*.d
