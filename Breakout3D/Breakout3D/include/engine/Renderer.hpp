@@ -21,6 +21,7 @@ public:
     // UI pass (HUD 3D em ortho)
     void beginUI(int fbW, int fbH);
     void drawUIQuad(float x, float y, float w, float h, const glm::vec4& color, bool useMask = false, glm::vec2 maskMin = glm::vec2(0.0f), glm::vec2 maskMax = glm::vec2(0.0f));
+    void drawUIQuad(float x, float y, float w, float h, const glm::vec4& color, unsigned int textureId); // Overload with texture
     void drawUIText(float x, float y, const std::string& text, float scale = 1.0f, const glm::vec4& color = glm::vec4(1.0f));
     void drawUIText(float x, float y, const std::string& text, float scale, const glm::vec3& color) {
         drawUIText(x, y, text, scale, glm::vec4(color, 1.0f));
