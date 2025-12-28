@@ -104,6 +104,9 @@ struct GameState {
 
     // Menu state
     int selectedMenuOption = 0; // 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
+    int hoveredMenuButton = -1; // -1 = none, 0 = Normal, 1 = Endless, 2 = Instructions, 3 = Exit
+    int hoveredOverlayButton = -1; // -1 = none, 0 = left button, 1 = right button (pause/gameover/win)
+    bool hoveredCloseButton = false; // Instructions close button (X)
     bool showInstructions = false;
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
     // Endless danger warning
