@@ -49,48 +49,166 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
 
     state.hoveredCloseButton = false;
 
-    // Update hover state
+    // Check hover on test badge (only on MAIN menu)
+    state.hoveredTestBadge = false;
+    if (state.currentMenuScreen == MenuScreen::MAIN) {
+        float panelX = menu.btn1.x - 150.0f;
+        float panelY = menu.btn4.y - 30.0f;
+        float panelW = 500.0f;
+        float badgeW = 48.0f;
+        float badgeH = 48.0f;
+        float badgeX = panelX + panelW - badgeW - 15.0f;
+        float badgeY = panelY + 15.0f;
+        state.hoveredTestBadge = pointInRectPx(px, py, badgeX, badgeY, badgeW, badgeH);
+    }
+
+    // Update hover state based on current menu screen
     state.hoveredMenuButton = -1;
-    if (menu.btn1.contains(px, py)) state.hoveredMenuButton = 0;
-    else if (menu.btn2.contains(px, py)) state.hoveredMenuButton = 1;
-    else if (menu.btn3.contains(px, py)) state.hoveredMenuButton = 2;
-    else if (menu.btn4.contains(px, py)) state.hoveredMenuButton = 3;
+    if (state.currentMenuScreen == MenuScreen::MAIN) {
+        if (menu.btn1.contains(px, py)) state.hoveredMenuButton = 0;      // PLAY
+        else if (menu.btn2.contains(px, py)) state.hoveredMenuButton = 1; // INSTRUCTIONS
+        else if (menu.btn3.contains(px, py)) state.hoveredMenuButton = 2; // OPTIONS
+        else if (menu.btn4.contains(px, py)) state.hoveredMenuButton = 3; // EXIT
+    } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
+        if (menu.btn1.contains(px, py)) state.hoveredMenuButton = 0;      // NORMAL
+        else if (menu.btn2.contains(px, py)) state.hoveredMenuButton = 1; // ENDLESS
+        else if (menu.btn3.contains(px, py)) state.hoveredMenuButton = 2; // ROGUE
+        else if (menu.btn4.contains(px, py)) state.hoveredMenuButton = 3; // LEVELS
+        // BACK button (different position)
+        else {
+            float backW = 120.0f;
+            float backH = 50.0f;
+            float panelX = menu.btn1.x - 150.0f;
+            float panelY = menu.btn4.y - 30.0f;
+            float backX = panelX + 20.0f;
+            float backY = panelY + 15.0f;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.hoveredMenuButton = 4; // BACK
+            }
+        }
+    } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
+        float offsetY = -50.0f; // Options buttons start lower
+        ui::Rect soundBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
+        ui::Rect graphicsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
+        
+        if (soundBtn.contains(px, py)) state.hoveredMenuButton = 0;    // SOUND
+        else if (graphicsBtn.contains(px, py)) state.hoveredMenuButton = 1; // GRAPHICS
+        // BACK button
+        else {
+            float backW = 120.0f;
+            float backH = 50.0f;
+            float panelX = menu.btn1.x - 150.0f;
+            float panelY = menu.btn4.y - 30.0f;
+            float backX = panelX + 20.0f;
+            float backY = panelY + 15.0f;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.hoveredMenuButton = 2; // BACK
+            }
+        }
+    }
 
     if (click) {
-        // Normal Mode button
-        if (menu.btn1.contains(px, py)) {
-            state.showInstructions = false;
-            state.gameType = GameType::NORMAL;
-            state.testOneBrick = false;
-            state.mode = GameMode::PLAYING; // Switch to playing mode
-            return true; // Signal that game should init
-        }
-        // Endless Mode button
-        if (menu.btn2.contains(px, py)) {
-            state.showInstructions = false;
-            state.gameType = GameType::ENDLESS;
-            state.wave = 1;
-            state.testOneBrick = false;
-            state.mode = GameMode::PLAYING; // Switch to playing mode
-            return true; // Signal that game should init
-        }
-        // Instructions button
-        if (menu.btn3.contains(px, py)) {
-            state.showInstructions = true;
-            return true;
-        }
-        // Test feature (click the "4" badge): Start a one-brick test level.
-        if (menu.testBadge.contains(px, py)) {
-            state.showInstructions = false;
-            state.gameType = GameType::NORMAL;
-            state.testOneBrick = true;
-            state.mode = GameMode::PLAYING;
-            return true;
-        }
-        // Exit button
-        if (menu.btn4.contains(px, py)) {
-            window.requestClose();
-            return true;
+        if (state.currentMenuScreen == MenuScreen::MAIN) {
+            // Test feature (click the "4" badge): Start a one-brick test level.
+            float panelX = menu.btn1.x - 150.0f;
+            float panelY = menu.btn4.y - 30.0f;
+            float panelW = 500.0f;
+            float badgeW = 48.0f;
+            float badgeH = 48.0f;
+            float badgeX = panelX + panelW - badgeW - 15.0f;
+            float badgeY = panelY + 15.0f;
+            if (pointInRectPx(px, py, badgeX, badgeY, badgeW, badgeH)) {
+                state.showInstructions = false;
+                state.gameType = GameType::NORMAL;
+                state.testOneBrick = true;
+                state.mode = GameMode::PLAYING;
+                return true;
+            }
+            
+            // PLAY button - go to play modes submenu
+            if (menu.btn1.contains(px, py)) {
+                state.currentMenuScreen = MenuScreen::PLAY_MODES;
+                return true;
+            }
+            // INSTRUCTIONS button
+            if (menu.btn2.contains(px, py)) {
+                state.showInstructions = true;
+                return true;
+            }
+            // OPTIONS button - go to options submenu
+            if (menu.btn3.contains(px, py)) {
+                state.currentMenuScreen = MenuScreen::OPTIONS;
+                return true;
+            }
+            // EXIT button
+            if (menu.btn4.contains(px, py)) {
+                window.requestClose();
+                return true;
+            }
+        } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
+            // NORMAL Mode button
+            if (menu.btn1.contains(px, py)) {
+                state.showInstructions = false;
+                state.gameType = GameType::NORMAL;
+                state.testOneBrick = false;
+                state.mode = GameMode::PLAYING;
+                return true;
+            }
+            // ENDLESS Mode button
+            if (menu.btn2.contains(px, py)) {
+                state.showInstructions = false;
+                state.gameType = GameType::ENDLESS;
+                state.wave = 1;
+                state.testOneBrick = false;
+                state.mode = GameMode::PLAYING;
+                return true;
+            }
+            // ROGUE Mode button (placeholder)
+            if (menu.btn3.contains(px, py)) {
+                // TODO: Implement rogue mode
+                return true;
+            }
+            // LEVELS Mode button (placeholder)
+            if (menu.btn4.contains(px, py)) {
+                // TODO: Implement levels mode
+                return true;
+            }
+            // BACK button
+            float backW = 120.0f;
+            float backH = 50.0f;
+            float panelX = menu.btn1.x - 150.0f;
+            float panelY = menu.btn4.y - 30.0f;
+            float backX = panelX + 20.0f;
+            float backY = panelY + 15.0f;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.currentMenuScreen = MenuScreen::MAIN;
+                return true;
+            }
+        } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
+            // SOUND button (placeholder)
+            float offsetY = -50.0f;
+            ui::Rect soundBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
+            if (soundBtn.contains(px, py)) {
+                // TODO: Implement sound settings
+                return true;
+            }
+            // GRAPHICS button (placeholder)
+            ui::Rect graphicsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
+            if (graphicsBtn.contains(px, py)) {
+                // TODO: Implement graphics settings
+                return true;
+            }
+            // BACK button
+            float backW = 120.0f;
+            float backH = 50.0f;
+            float panelX = menu.btn1.x - 150.0f;
+            float panelY = menu.btn4.y - 30.0f;
+            float backX = panelX + 20.0f;
+            float backY = panelY + 15.0f;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.currentMenuScreen = MenuScreen::MAIN;
+                return true;
+            }
         }
     }
 
