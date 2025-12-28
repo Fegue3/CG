@@ -10,7 +10,7 @@ struct GameState;
 
 namespace game::render {
 
-void renderMenu(const RenderContext& ctx, const GameState& state);
+void renderMenu(const RenderContext& ctx, const GameState& state, const GameAssets& assets);
 void renderUI(const RenderContext& ctx, const GameState& state, const GameConfig& cfg, const GameAssets& assets);
 
 } // namespace game::render
