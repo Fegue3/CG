@@ -35,8 +35,7 @@ static RogueCardDef kDefs[] = {
     {RogueCardId::MOD_FIREBALL_WIDE_SLOW, "FIREBALL WIDE / SLOW", "+Bigger explosions.\n-Slower paddle.", false},
 
     // More normal modifiers (environment-ish)
-    {RogueCardId::MOD_WIND_RIGHT, "WIND: RIGHT", "A steady wind pushes balls right.\n+Drops, -paddle speed.", false},
-    {RogueCardId::MOD_WIND_LEFT, "WIND: LEFT", "A steady wind pushes balls left.\n+Drops, -paddle speed.", false},
+    {RogueCardId::MOD_WIND_RANDOM, "WIND: CHAOTIC", "Balls are pushed left or right randomly.\n+Drops, -paddle speed.", false},
     {RogueCardId::MOD_CENTERED_ARENA, "CENTERED ARENA", "You can't hug the walls.\n+Points, -drops.", false},
     {RogueCardId::MOD_STICKY_PADDLE, "STICKY PADDLE", "Balls stick to the paddle on hit.\n-Slower balls.", false},
     {RogueCardId::MOD_SCORE_FARM, "SCORE FARM", "Higher brick points.\nLower drop chance.", false},
@@ -68,21 +67,16 @@ const RogueCardDef& cardDef(RogueCardId id) {
 }
 
 glm::vec3 cardAccent(RogueCardId id) {
-    // Color language: OP = gold, powerups = cyan, trade-offs = purple.
+    // Color language: OP = gold, powerups = blue, trade-offs = purple.
     const auto& d = cardDef(id);
     if (d.isOp) return glm::vec3(1.0f, 0.80f, 0.15f);
 
-    switch (id) {
-        case RogueCardId::PU_EXTRA_LIFE: return glm::vec3(0.95f, 0.25f, 0.25f);
-        case RogueCardId::PU_EXTRA_BALL: return glm::vec3(0.35f, 0.95f, 0.35f);
-        case RogueCardId::PU_EXPAND: return glm::vec3(0.25f, 0.75f, 0.95f);
-        case RogueCardId::PU_FIREBALL: return glm::vec3(0.95f, 0.45f, 0.10f);
-        case RogueCardId::PU_SHIELD: return glm::vec3(0.60f, 0.85f, 1.00f);
-        case RogueCardId::PU_SLOW: return glm::vec3(0.80f, 0.80f, 0.85f);
-        case RogueCardId::PU_REVERSE: return glm::vec3(0.85f, 0.30f, 0.95f);
-        case RogueCardId::PU_TINY: return glm::vec3(0.95f, 0.75f, 0.15f);
-        default: break;
+    // Check if it's a powerup card - all powerups use the same blue color
+    if (isPowerupCard(id)) {
+        return glm::vec3(0.25f, 0.75f, 0.95f); // Blue
     }
+
+    // Trade-off modifier cards use purple
     return glm::vec3(0.75f, 0.25f, 0.85f);
 }
 
@@ -152,6 +146,7 @@ void initRunPools(GameState& state) {
     state.rogueDropDeck.clear();
     state.rogueOfferCount = 0;
     state.hoveredRogueCard = -1;
+    state.hoveredRogueCardPickButton = -1;
 
     // Reset modifiers
     state.rogueDropChanceMult = 1.0f;
@@ -168,6 +163,8 @@ void initRunPools(GameState& state) {
     state.rogueWindX = 0.0f;
     state.roguePaddleClampMarginX = 0.0f;
     state.rogueStickyPaddle = false;
+    state.rogueRandomWindActive = false;
+    state.rogueRandomWindTimer = 0.0f;
 
     // Use existing fields for future effects:
     // state.roguePendingRowsToSpawn, etc are handled elsewhere.
@@ -203,6 +200,7 @@ void dealOffer(GameState& state, int count, bool opPack, int waveProgress) {
     auto& pool = opPack ? state.rogueRemainingOp : state.rogueRemainingNormal;
     state.rogueOfferCount = 0;
     state.hoveredRogueCard = -1;
+    state.hoveredRogueCardPickButton = -1;
 
     // IMPORTANT: do NOT remove cards from the pool just because they were offered.
     // Only the PICKED card is removed (so unchosen cards can appear later).
@@ -328,13 +326,9 @@ void applyPickedCard(GameState& state, const GameConfig& cfg, RogueCardId picked
             state.roguePaddleSpeedMult *= 0.90f;
             break;
 
-        case RogueCardId::MOD_WIND_RIGHT:
-            state.rogueWindX += 3.2f;
-            state.rogueDropChanceMult *= 1.08f;
-            state.roguePaddleSpeedMult *= 0.92f;
-            break;
-        case RogueCardId::MOD_WIND_LEFT:
-            state.rogueWindX -= 3.2f;
+        case RogueCardId::MOD_WIND_RANDOM:
+            state.rogueRandomWindActive = true;
+            state.rogueRandomWindTimer = 0.0f;
             state.rogueDropChanceMult *= 1.08f;
             state.roguePaddleSpeedMult *= 0.92f;
             break;
