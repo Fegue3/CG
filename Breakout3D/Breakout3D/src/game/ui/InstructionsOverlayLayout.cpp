@@ -7,16 +7,17 @@ namespace game::ui {
 InstructionsOverlayLayout instructionsOverlayLayout(const MenuLayout& menu, int fbW, int fbH, int instructionsTab) {
     InstructionsOverlayLayout L{};
     const bool isPowerups = (instructionsTab == 1);
+    const bool isRogueCards = (instructionsTab == 2);
     const float uiS = menu.uiScale;
 
     // Panel sizing/position MUST match menu render/input assumptions.
     // Powerups overlay should scale up more on fullscreen.
-    float instrW = isPowerups ? std::min(1400.0f, (float)fbW * 0.92f)
+    float instrW = (isPowerups || isRogueCards) ? std::min(1400.0f, (float)fbW * 0.92f)
                               : std::min(980.0f,  (float)fbW * 0.75f);
-    float instrH = isPowerups ? std::min(860.0f,  (float)fbH * 0.78f)
+    float instrH = (isPowerups || isRogueCards) ? std::min(860.0f,  (float)fbH * 0.78f)
                               : std::min(690.0f,  (float)fbH * 0.72f);
     float instrX = ((float)fbW - instrW) * 0.5f;
-    float instrY = std::max(40.0f, ((float)fbH - instrH) * 0.5f - (isPowerups ? 80.0f : 60.0f));
+    float instrY = std::max(40.0f, ((float)fbH - instrH) * 0.5f - ((isPowerups || isRogueCards) ? 80.0f : 60.0f));
 
     // Keep below the big title (same gap as OverlayLayout.cpp).
     const float titlePanelGap = 26.0f;
@@ -32,8 +33,8 @@ InstructionsOverlayLayout instructionsOverlayLayout(const MenuLayout& menu, int 
     L.backBtn = menu.backBtn;
 
     // Content region inside the panel (avoid title/top and back/bottom).
-    const float pad = (isPowerups ? 34.0f : 44.0f) * uiS;
-    const float topReserve = (isPowerups ? 132.0f : 110.0f) * uiS; // title + underline breathing room
+    const float pad = ((isPowerups || isRogueCards) ? 34.0f : 44.0f) * uiS;
+    const float topReserve = ((isPowerups || isRogueCards) ? 132.0f : 110.0f) * uiS; // title + underline breathing room
     float contentTop = instrY + instrH - topReserve;
     float contentBottom = std::max(instrY + pad, L.backBtn.y + L.backBtn.h + 18.0f * uiS);
     float contentH = std::max(1.0f, contentTop - contentBottom);
@@ -43,8 +44,8 @@ InstructionsOverlayLayout instructionsOverlayLayout(const MenuLayout& menu, int 
 
     // Split into left model preview and right info panel.
     // Powerups: push the info widget further right while keeping it larger by letting the panel grow on fullscreen.
-    const float gap = (isPowerups ? 34.0f : 26.0f) * uiS;
-    float split = isPowerups ? 0.58f : 0.50f; // model left / info right
+    const float gap = ((isPowerups || isRogueCards) ? 34.0f : 26.0f) * uiS;
+    float split = (isPowerups || isRogueCards) ? 0.58f : 0.50f; // model left / info right
     float leftW = (contentW - gap) * split;
     float rightW = contentW - gap - leftW;
 
