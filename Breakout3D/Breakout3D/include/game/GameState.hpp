@@ -28,6 +28,7 @@ enum class GameType {
 enum class MenuScreen {
     MAIN,       // Main menu: Play, Instructions, Options, Exit
     PLAY_MODES, // Play modes submenu: Normal, Endless, Rogue, Levels, Back
+    LEVEL_SELECT, // Level select screen for LEVELS mode
     INSTRUCTIONS, // Instructions screen: Controls, Powerups, Back
     OPTIONS     // Options submenu: Sound, Graphics, Back
 };
@@ -40,6 +41,13 @@ struct GameState {
 
     int lives = 3;
     int score = 0;
+    
+    // Levels mode: current level (1-10)
+    int currentLevel = 1;
+    int levelsBestLevel = 1; // highest level reached (persistent)
+    int levelsCompletedStars[10] = {0,0,0,0,0,0,0,0,0,0}; // 0-3 stars per level
+    int hoveredLevelButton = -1; // -1 = none, 0-9 = level index
+    
     // Endless mode: persistent best score (loaded on init, updated/saved during play)
     int endlessBestScore = 0;
     // Endless mode: "streak bank" — points accumulate here and commit to score
