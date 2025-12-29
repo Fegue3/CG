@@ -1,5 +1,6 @@
 #include "game/systems/PhysicsSystem.hpp"
 #include "game/entities/Ball.hpp"
+#include "game/rogue/RogueCards.hpp"
 #include <algorithm>
 #include <glm/glm.hpp>
 
@@ -17,6 +18,9 @@ void PhysicsSystem::resetBallToPaddle(Ball& ball, const glm::vec3& paddlePos, co
 
 void PhysicsSystem::updatePaddle(GameState& state, const GameConfig& cfg, float dir, float dt) {
     float currentPaddleSpeed = cfg.paddleSpeed;
+    if (state.gameType == GameType::ROGUE) {
+        currentPaddleSpeed *= game::rogue::paddleSpeedMult(state);
+    }
     if (state.slowTimer > 0.0f) {
         currentPaddleSpeed *= cfg.slowSpeedFactor;
     }
@@ -24,6 +28,9 @@ void PhysicsSystem::updatePaddle(GameState& state, const GameConfig& cfg, float 
     state.paddlePos.x += dir * currentPaddleSpeed * dt;
     
     glm::vec3 currentPaddleSize = cfg.paddleSize;
+    if (state.gameType == GameType::ROGUE) {
+        currentPaddleSize.x *= game::rogue::basePaddleScaleX(state);
+    }
     if (state.expandTimer > 0.0f) {
         currentPaddleSize.x *= cfg.expandScaleFactor;
     }
@@ -34,13 +41,16 @@ void PhysicsSystem::updatePaddle(GameState& state, const GameConfig& cfg, float 
     float paddleHalfX = currentPaddleSize.x * 0.5f;
     state.paddlePos.x = std::clamp(
         state.paddlePos.x,
-        cfg.arenaMinX + paddleHalfX,
-        cfg.arenaMaxX - paddleHalfX
+        cfg.arenaMinX + paddleHalfX + (state.gameType == GameType::ROGUE ? state.roguePaddleClampMarginX : 0.0f),
+        cfg.arenaMaxX - paddleHalfX - (state.gameType == GameType::ROGUE ? state.roguePaddleClampMarginX : 0.0f)
     );
 }
 
 void PhysicsSystem::updateBalls(GameState& state, const GameConfig& cfg, float dt) {
     glm::vec3 currentPaddleSize = cfg.paddleSize;
+    if (state.gameType == GameType::ROGUE) {
+        currentPaddleSize.x *= game::rogue::basePaddleScaleX(state);
+    }
     if (state.expandTimer > 0.0f) {
         currentPaddleSize.x *= cfg.expandScaleFactor;
     }
@@ -58,6 +68,18 @@ void PhysicsSystem::updateBalls(GameState& state, const GameConfig& cfg, float d
         }
         
         b.pos += b.vel * dt;
+
+        // Rogue environment: constant lateral wind, keeps ball speed magnitude stable.
+        if (state.gameType == GameType::ROGUE && !b.attached && std::abs(state.rogueWindX) > 1e-4f) {
+            float sp = glm::length(glm::vec2(b.vel.x, b.vel.z));
+            b.vel.x += state.rogueWindX * dt;
+            float sp2 = glm::length(glm::vec2(b.vel.x, b.vel.z));
+            if (sp > 1e-4f && sp2 > 1e-4f) {
+                float k = sp / sp2;
+                b.vel.x *= k;
+                b.vel.z *= k;
+            }
+        }
 
         // Shield barrier: bounce balls back instead of losing them.
         // Positioned a bit "behind" the paddle (towards arenaMaxZ).

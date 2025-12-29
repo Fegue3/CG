@@ -2,6 +2,7 @@
 #include "game/entities/Ball.hpp"
 #include "game/entities/PowerUp.hpp"
 #include "game/systems/PhysicsSystem.hpp"
+#include "game/rogue/RogueCards.hpp"
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
@@ -9,6 +10,19 @@
 namespace game {
 
 void PowerUpSystem::spawnPowerUp(GameState& state, const glm::vec3& pos, float chance) {
+    // Rogue mode: no random pool. Only the chosen card drop can appear on bricks.
+    if (state.gameType == GameType::ROGUE) {
+        if (state.rogueDropDeck.empty()) return;
+        float r = (float)rand() / (float)RAND_MAX;
+        if (r > chance) return;
+        PowerUp p;
+        p.pos = pos;
+        p.pos.y = 0.4f;
+        p.type = state.rogueDropDeck[(size_t)(rand() % state.rogueDropDeck.size())];
+        state.powerups.push_back(p);
+        return;
+    }
+
     float r = (float)rand() / (float)RAND_MAX;
     if (r > chance) return;
 
@@ -46,7 +60,9 @@ void PowerUpSystem::applyPowerUpEffect(GameState& state, const GameConfig& cfg, 
             Ball nb;
             nb.pos = spawnPos;
             float ang = glm::radians(-30.0f + k * 30.0f);
-            nb.vel = glm::vec3(std::sin(ang), 0.0f, -std::cos(ang)) * cfg.ballSpeed;
+            float sp = cfg.ballSpeed;
+            if (state.gameType == GameType::ROGUE) sp *= game::rogue::ballSpeedMult(state);
+            nb.vel = glm::vec3(std::sin(ang), 0.0f, -std::cos(ang)) * sp;
             nb.attached = false;
             state.balls.push_back(nb);
         }
@@ -65,7 +81,9 @@ void PowerUpSystem::applyPowerUpEffect(GameState& state, const GameConfig& cfg, 
         state.balls.push_back(fb);
         state.fireballTimer = 0.0f; // (legacy field; no longer used for behavior)
     } else if (type == PowerUpType::SHIELD) {
-        state.shieldTimer = cfg.shieldDuration;
+        float dur = cfg.shieldDuration;
+        if (state.gameType == GameType::ROGUE) dur *= std::max(0.25f, state.rogueShieldDurationMult);
+        state.shieldTimer = dur;
     } else if (type == PowerUpType::REVERSE) {
         state.reverseTimer = cfg.reverseDuration;
     } else if (type == PowerUpType::TINY) {
@@ -98,7 +116,7 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
             // - Normal: apply directly to score
             auto addGood = [&](int pts) {
                 if (pts <= 0) return;
-                if (state.gameType == GameType::ENDLESS) {
+                if (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) {
                     state.endlessStreakPoints += pts;
                     state.endlessStreakPosPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
@@ -111,7 +129,7 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
 
             auto applyPenalty = [&](int pts) {
                 if (pts <= 0) return;
-                if (state.gameType == GameType::ENDLESS) {
+                if (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) {
                     // User request: penalties should behave EXACTLY like the white streak bank:
                     // affect the BANK now (can go negative), and only affect real score on commit.
                     state.endlessStreakPoints -= pts;
