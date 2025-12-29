@@ -25,6 +25,11 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     // Get cached menu layout (computed using real font metrics; must match UIRender.cpp)
     const ui::MenuLayout& menu = state.menuLayout;
 
+    // Secret: Press L to unlock all levels
+    if (input.keyPressed(engine::Key::L)) {
+        state.levelsBestLevel = 20;
+    }
+
     // If instructions overlay is shown, handle BACK + (Powerups tab) inspector interactions.
     if (state.showInstructions) {
         state.hoveredMenuButton = -1; // No button hovered when instructions are shown
@@ -281,14 +286,14 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
         // Level select: hover detection for level buttons
         // Use custom panel dimensions (same as MenuRender.cpp)
         float s = menu.uiScale;
-        float levelPanelW = 720.0f * s;
-        float levelPanelH = 420.0f * s;
+        float levelPanelW = 800.0f * s;
+        float levelPanelH = 650.0f * s;
         float levelPanelX = ((float)fbW - levelPanelW) * 0.5f;
-        float levelPanelY = ((float)fbH * 0.45f) - levelPanelH * 0.5f;
+        float levelPanelY = ((float)fbH * 0.40f) - levelPanelH * 0.5f;
         
-        const int totalLevels = 10;
+        const int totalLevels = 20;
         const int cols = 5;
-        const int rows = 2;
+        const int rows = 4;
         
         float btnSize = 110.0f * s;
         float gapX = 25.0f * s;
@@ -305,7 +310,11 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             float x = startX + col * (btnSize + gapX);
             float y = startY + (rows - 1 - row) * (btnSize + gapY);
             
-            if (pointInRectPx(px, py, x, y, btnSize, btnSize)) {
+            // Convert OpenGL Y to screen Y (Y=0 at top, grows downward)
+            float screenYBottom = fbH - y;  // Top edge in pixel coordinates
+            float screenYTop = screenYBottom - btnSize;  // Bottom edge in pixel coordinates
+            
+            if (pointInRectPx(px, py_raw, x, screenYTop, btnSize, btnSize)) {
                 state.hoveredLevelButton = i;
                 break;
             }
@@ -416,17 +425,17 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 return true;
             }
         } else if (state.currentMenuScreen == MenuScreen::LEVEL_SELECT) {
-            // Level select screen: grid of 10 level buttons (2 rows x 5 cols)
+            // Level select screen: grid of 20 level buttons (4 rows x 5 cols)
             // Use custom panel dimensions (same as MenuRender.cpp)
             float s = menu.uiScale;
-            float levelPanelW = 720.0f * s;
-            float levelPanelH = 420.0f * s;
+            float levelPanelW = 800.0f * s;
+            float levelPanelH = 650.0f * s;
             float levelPanelX = ((float)fbW - levelPanelW) * 0.5f;
-            float levelPanelY = ((float)fbH * 0.45f) - levelPanelH * 0.5f;
+            float levelPanelY = ((float)fbH * 0.40f) - levelPanelH * 0.5f;
             
-            const int totalLevels = 10;
+            const int totalLevels = 20;
             const int cols = 5;
-            const int rows = 2;
+            const int rows = 4;
             
             float btnSize = 110.0f * s;
             float gapX = 25.0f * s;
@@ -443,7 +452,11 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 float x = startX + col * (btnSize + gapX);
                 float y = startY + (rows - 1 - row) * (btnSize + gapY);
                 
-                if (pointInRectPx(px, py, x, y, btnSize, btnSize)) {
+                // Convert OpenGL Y to screen Y (Y=0 at top, grows downward)
+                float screenYBottom = fbH - y;  // Top edge in pixel coordinates
+                float screenYTop = screenYBottom - btnSize;  // Bottom edge in pixel coordinates
+                
+                if (pointInRectPx(px, py_raw, x, screenYTop, btnSize, btnSize)) {
                     // Check if level is unlocked
                     if (i < state.levelsBestLevel) {
                         // Start this level
