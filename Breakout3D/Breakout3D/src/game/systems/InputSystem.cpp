@@ -227,12 +227,19 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
         else if (menu.btn3.contains(px, py)) state.hoveredMenuButton = 2; // OPTIONS
         else if (menu.btn4.contains(px, py)) state.hoveredMenuButton = 3; // EXIT
     } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
-        // Hover should activate on the whole card (not only the PLAY button).
+        // Hover should activate on the whole card (not only the PLAY button) for card scaling.
         if (menu.normal.card.contains(px, py) || menu.normal.playBtn.contains(px, py)) state.hoveredMenuButton = 0;
         else if (menu.endless.card.contains(px, py) || menu.endless.playBtn.contains(px, py)) state.hoveredMenuButton = 1;
         else if (menu.rogue.card.contains(px, py) || menu.rogue.playBtn.contains(px, py)) state.hoveredMenuButton = 2;
         else if (menu.levels.card.contains(px, py) || menu.levels.playBtn.contains(px, py)) state.hoveredMenuButton = 3;
         else if (menu.backBtn.contains(px, py)) state.hoveredMenuButton = 4;         // BACK
+
+        // Specific hover for PLAY buttons (used to apply neon border like Rogue pick buttons)
+        state.hoveredPlayModeButton = -1;
+        if (menu.normal.playBtn.contains(px, py)) state.hoveredPlayModeButton = 0;
+        else if (menu.endless.playBtn.contains(px, py)) state.hoveredPlayModeButton = 1;
+        else if (menu.rogue.playBtn.contains(px, py)) state.hoveredPlayModeButton = 2;
+        else if (menu.levels.playBtn.contains(px, py)) state.hoveredPlayModeButton = 3;
     } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
         float offsetY = -50.0f; // Options buttons start lower
         ui::Rect soundBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
@@ -346,16 +353,16 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 return true;
             }
         } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
-            // NORMAL Mode
-            if (menu.normal.playBtn.contains(px, py)) {
+            // NORMAL Mode (click anywhere on the card or PLAY button)
+            if (menu.normal.playBtn.contains(px, py) || menu.normal.card.contains(px, py)) {
                 state.showInstructions = false;
                 state.gameType = GameType::NORMAL;
                 state.testOneBrick = false;
                 state.mode = GameMode::PLAYING;
                 return true;
             }
-            // ENDLESS Mode
-            if (menu.endless.playBtn.contains(px, py)) {
+            // ENDLESS Mode (click anywhere on the card or PLAY button)
+            if (menu.endless.playBtn.contains(px, py) || menu.endless.card.contains(px, py)) {
                 state.showInstructions = false;
                 state.gameType = GameType::ENDLESS;
                 state.wave = 1;
@@ -363,8 +370,8 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.mode = GameMode::PLAYING;
                 return true;
             }
-            // ROGUE Mode
-            if (menu.rogue.playBtn.contains(px, py)) {
+            // ROGUE Mode (click anywhere on the card or PLAY button)
+            if (menu.rogue.playBtn.contains(px, py) || menu.rogue.card.contains(px, py)) {
                 state.showInstructions = false;
                 state.gameType = GameType::ROGUE;
                 state.wave = 1;
@@ -372,8 +379,8 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.mode = GameMode::PLAYING;
                 return true;
             }
-            // LEVELS Mode - go to level select screen
-            if (menu.levels.playBtn.contains(px, py)) {
+            // LEVELS Mode - go to level select screen (click anywhere on the card or PLAY button)
+            if (menu.levels.playBtn.contains(px, py) || menu.levels.card.contains(px, py)) {
                 state.currentMenuScreen = MenuScreen::LEVEL_SELECT;
                 state.hoveredLevelButton = -1;
                 return true;
