@@ -577,4 +577,29 @@ void Renderer::endUI() {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::uiSetDepthTest(bool enabled, bool clearDepth) {
+    if (enabled) {
+        glEnable(GL_DEPTH_TEST);
+        if (clearDepth) glClear(GL_DEPTH_BUFFER_BIT);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+}
+
+void Renderer::uiSetScissor(bool enabled, float x, float y, float w, float h) {
+    if (!enabled) {
+        glDisable(GL_SCISSOR_TEST);
+        return;
+    }
+
+    // UI coordinates are bottom-left origin (same as glScissor).
+    int ix = (int)std::max(0.0f, std::floor(x));
+    int iy = (int)std::max(0.0f, std::floor(y));
+    int iw = (int)std::max(0.0f, std::ceil(w));
+    int ih = (int)std::max(0.0f, std::ceil(h));
+
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(ix, iy, iw, ih);
+}
+
 } // namespace engine

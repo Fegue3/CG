@@ -35,6 +35,11 @@ public:
     
     void drawUITriangle(const glm::vec2& p0, const glm::vec2& p1, const glm::vec2& p2, const glm::vec4& color);
 
+    // UI helpers for special cases (e.g., drawing 3D meshes inside UI panels).
+    // Note: `beginUI()` disables depth by default; these allow temporarily enabling it.
+    void uiSetDepthTest(bool enabled, bool clearDepth = false);
+    void uiSetScissor(bool enabled, float x = 0.0f, float y = 0.0f, float w = 0.0f, float h = 0.0f);
+
 private:
     Shader m_shader;
 
