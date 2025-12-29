@@ -2,6 +2,7 @@
 #include "game/entities/Brick.hpp"
 #include "game/entities/Ball.hpp"
 #include "game/systems/PhysicsSystem.hpp"
+#include "game/LevelLayouts.hpp"
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
@@ -104,15 +105,21 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.pendingRespawnAfterFireball = false;
     state.brickHitCooldown = 0.0f;
 
-    // Generate bricks (0 for normal, waveNumber for endless)
-    int waveToGenerate = (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) ? state.wave : 0;
-    int rowsInitial = 9;
-    if (state.gameType == GameType::ENDLESS) {
-        rowsInitial = 9 + (state.wave / 2);
-    }
-    generateBricks(state, cfg, waveToGenerate);
-    if (state.gameType == GameType::ENDLESS) {
-        state.endlessRowsSpawned = rowsInitial;
+    // Generate bricks
+    if (state.gameType == GameType::LEVELS) {
+        // LEVELS mode: load predefined level layout
+        generateBricksFromLevel(state, cfg, state.currentLevel);
+    } else {
+        // Other modes: procedural generation
+        int waveToGenerate = (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) ? state.wave : 0;
+        int rowsInitial = 9;
+        if (state.gameType == GameType::ENDLESS) {
+            rowsInitial = 9 + (state.wave / 2);
+        }
+        generateBricks(state, cfg, waveToGenerate);
+        if (state.gameType == GameType::ENDLESS) {
+            state.endlessRowsSpawned = rowsInitial;
+        }
     }
 
     // Rogue: always start with a card pick (2 placeholder cards) before wave 1 begins.
@@ -261,6 +268,40 @@ void InitSystem::spawnIncrementalBricks(GameState& state, const GameConfig& cfg,
     }
 
     state.endlessRowsSpawned = totalRowsBefore + rowsToInsert;
+}
+
+void InitSystem::generateBricksFromLevel(GameState& state, const GameConfig& cfg, int levelNumber) {
+    state.bricks.clear();
+    
+    auto levels = getAllLevels();
+    if (levelNumber < 1 || levelNumber > (int)levels.size()) {
+        levelNumber = 1; // Fallback to level 1
+    }
+    
+    const LevelLayout& layout = levels[levelNumber - 1];
+    
+    // Convert grid positions to world coordinates
+    // Grid spacing
+    float brickW = 2.2f;
+    float brickH = 1.0f;
+    float gapX = 0.15f;
+    float gapZ = 0.15f;
+    
+    // Center the grid horizontally
+    float totalGridWidth = 12 * (brickW + gapX); // Assume max 12 columns
+    float startX = -totalGridWidth * 0.5f;
+    float startZ = cfg.arenaMinZ + 2.0f; // Start near top
+    
+    for (const auto& data : layout.bricks) {
+        Brick b;
+        b.pos.x = startX + data.gridX * (brickW + gapX);
+        b.pos.y = 0.0f;
+        b.pos.z = startZ + data.gridZ * (brickH + gapZ);
+        b.size = glm::vec3(brickW, 0.6f, brickH);
+        b.hp = b.maxHp = data.hp;
+        b.alive = true;
+        state.bricks.push_back(b);
+    }
 }
 
 } // namespace game
