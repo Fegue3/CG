@@ -294,16 +294,20 @@ Commit on death:
 
 - When you lose (brick crosses the death line), the streak is also committed immediately so those points count.
 
-### Powerup pickup scoring (Endless only)
+### Powerup pickup scoring (Endless; also applies to Rogue)
 
 Implementation: `Breakout3D/Breakout3D/src/game/systems/PowerUpSystem.cpp`
 
-On pickup, Endless adjusts the streak/score:
+On pickup, Endless adjusts the **streak bank** (not the score directly). Rogue uses the same logic:
 
-- `SLOW`: penalty of 300 (removes from streak first; remainder subtracts from score, clamped to >=0)
-- `EXPAND`: +250 into streak
-- `EXTRA_BALL`: +350 into streak
-- `EXTRA_LIFE`: +500 into streak
+- `EXPAND`: +220 into bank
+- `EXTRA_BALL`: +300 into bank
+- `EXTRA_LIFE`: +400 into bank
+- `FIREBALL`: +250 into bank
+- `SHIELD`: +250 into bank
+- `SLOW`: -220 penalty into bank
+- `REVERSE`: -250 penalty into bank
+- `TINY`: -250 penalty into bank
 
 ---
 
@@ -358,10 +362,14 @@ So `cfg.powerUpChance` controls the overall frequency.
 
 If a drop occurs, type is chosen by `r2 = rand() % 100`:
 
-- `EXTRA_BALL`: 45%
-- `EXPAND`: 20%
-- `SLOW`: 17%
-- `EXTRA_LIFE`: 18%
+- `EXTRA_BALL`: 22%
+- `EXPAND`: 14%
+- `SLOW`: 12%
+- `EXTRA_LIFE`: 10%
+- `FIREBALL`: 14%
+- `SHIELD`: 14%
+- `REVERSE`: 7%
+- `TINY`: 7%
 
 ### EXTRA_BALL behavior
 
