@@ -146,6 +146,19 @@ void drawPauseOrEndOverlay(const RenderContext& ctx, const GameState& state) {
             ctx.renderer.drawUIQuad(pbX + btnShadow, pbY - btnShadow, pbW, pbH, glm::vec4(0,0,0, hovered ? 0.55f : 0.45f));
             ctx.renderer.drawUIQuad(pbX, pbY, pbW, pbH, glm::vec4(btnCol, 1.0f));
 
+            // Animated RGB border on PICK button when hovered specifically over the button
+            if (state.hoveredRogueCardPickButton >= 0 && state.hoveredRogueCardPickButton < state.rogueOfferCount && 
+                state.rogueOffer[state.hoveredRogueCardPickButton] == id) {
+                float bt = 3.0f * uiS;
+                float hueRgb = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
+                glm::vec3 neonRgb = ui::hsv2rgb(hueRgb, 0.85f, 1.0f);
+                glm::vec4 borderCol(neonRgb, 1.0f);
+                ctx.renderer.drawUIQuad(pbX - bt, pbY - bt, pbW + 2 * bt, bt, borderCol);
+                ctx.renderer.drawUIQuad(pbX - bt, pbY + pbH, pbW + 2 * bt, bt, borderCol);
+                ctx.renderer.drawUIQuad(pbX - bt, pbY, bt, pbH, borderCol);
+                ctx.renderer.drawUIQuad(pbX + pbW, pbY, bt, pbH, borderCol);
+            }
+
             std::string lbl = "PICK";
             float pScale = 1.28f * uiS;
             float pW = ctx.renderer.measureUITextWidth(lbl, pScale);
