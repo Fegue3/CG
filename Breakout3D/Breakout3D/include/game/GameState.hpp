@@ -5,6 +5,7 @@
 #include "game/entities/Ball.hpp"
 #include "game/entities/PowerUp.hpp" // includes PowerUpType enum
 #include "game/ui/OverlayLayout.hpp"
+#include "game/rogue/RogueCardId.hpp"
 
 namespace game {
 
@@ -12,6 +13,7 @@ enum class GameMode {
     MENU,
     PLAYING,
     PAUSED,
+    ROGUE_CARDS, // Rogue mode: pick a reward card (gameplay paused)
     GAME_OVER,
     WIN
 };
@@ -112,6 +114,59 @@ struct GameState {
     int cameraMode = 1;
     int currentBg = -1;
 
+    // --- Rogue mode (wave-based) ---
+    // Rewards are presented as "cards" between waves (and at run start).
+    int rogueRewardEvery = 1; // show cards after every wave (user request)
+    // Current offer (up to 3 cards) + hover index.
+    game::rogue::RogueCardId rogueOffer[3] = {
+        game::rogue::RogueCardId::PU_EXPAND,
+        game::rogue::RogueCardId::PU_EXTRA_BALL,
+        game::rogue::RogueCardId::PU_EXTRA_LIFE
+    };
+    int rogueOfferCount = 0;
+    int hoveredRogueCard = -1; // -1 none, 0..2
+
+    // Chosen cards (no repeats) and "drop deck" (powerup types that can drop from bricks).
+    std::vector<game::rogue::RogueCardId> rogueChosen;
+    std::vector<PowerUpType> rogueDropDeck;
+
+    // Remaining pools for no-repeat dealing.
+    std::vector<game::rogue::RogueCardId> rogueRemainingNormal;
+    std::vector<game::rogue::RogueCardId> rogueRemainingOp;
+
+    // Starting draft: wave 1 begins with 3 rounds of 3-card choices before gameplay.
+    int rogueStartingDraftRoundsLeft = 0;
+
+    // Persistent modifiers (applied immediately on pick; many have trade-offs).
+    float rogueDropChanceMult = 1.0f;
+    float rogueBasePaddleScaleX = 1.0f;
+    float roguePaddleSpeedMult = 1.0f;
+    float rogueBallSpeedMult = 1.0f;
+    float rogueBrickPointsMult = 1.0f; // affects brick point awards
+    float rogueBankIdleMult = 1.0f;    // >1 = safer (longer to bank), <1 = riskier
+    int rogueBrickDamageBonus = 0;     // extra damage per normal hit (e.g. Pierce Training)
+    float rogueFireballRadiusMult = 1.0f;
+    float rogueShieldDurationMult = 1.0f;
+    int rogueLifeLossPenaltyBonus = 0; // additive penalty in addition to cfg.lifeLossPenalty
+    int rogueRowsPerWaveDelta = 0;      // negative reduces rows inserted per wave (Row Control)
+    float rogueWindX = 0.0f;            // environment: constant lateral wind applied to balls
+    float roguePaddleClampMarginX = 0.0f; // environment: reduces paddle range from walls
+    bool rogueStickyPaddle = false;     // environment: balls stick to paddle on hit (non-fireball)
+    int rogueMaxWaves = 10; // run ends (WIN) after clearing this wave number
+    int rogueBestScore = 0; // persistent best score for Rogue (separate from Endless)
+
+    // Wave advancement in Rogue is NOT "clear all bricks". It's quota/time based:
+    int rogueBricksBrokenThisWave = 0;
+    float rogueWaveTimer = 0.0f;
+    float rogueWaveCooldown = 0.0f; // small gate to prevent double-advance in the same frame
+    int rogueRowsSpawned = 0; // counts rows inserted so far (used for pacing/difficulty if needed)
+
+    // After a wave advance, we queue row insertions and spawn them gradually
+    // AFTER the player picks a card.
+    int roguePendingRowsToSpawn = 0;
+    float rogueRowSpawnTimer = 0.0f;
+    float rogueRowSpawnInterval = 0.55f; // seconds between each inserted row (tune)
+
     // Menu state
     MenuScreen currentMenuScreen = MenuScreen::MAIN;
     int selectedMenuOption = 0;
@@ -120,7 +175,7 @@ struct GameState {
     bool hoveredCloseButton = false; // Instructions overlay BACK button (bottom-left)
     bool hoveredTestBadge = false; // ONE BRICK test badge
     bool showInstructions = false;
-    int instructionsTab = 0; // 0 = Controls, 1 = Powerups
+    int instructionsTab = 0; // 0 = Controls, 1 = Powerups, 2 = Rogue Cards
     // Powerups inspector (Instructions -> Powerups overlay)
     int powerupInspectIndex = 0;
     float powerupInspectYaw = 0.0f;
@@ -128,6 +183,14 @@ struct GameState {
     bool powerupInspectDragging = false;
     glm::vec2 powerupInspectLastMouse = glm::vec2(0.0f);
     int hoveredPowerupNav = -1; // -1 none, 0 left, 1 right
+
+    // Rogue cards browser (Instructions -> Rogue Cards)
+    int hoveredRogueCardsItem = -1; // -1 none, else index into current slots list
+    game::rogue::RogueCardId rogueCardsSelected = game::rogue::RogueCardId::PU_EXPAND;
+    bool rogueCardsInspectOpen = false; // modal card inspect overlay
+    float rogueCardsScrollPowerups = 0.0f;  // px
+    float rogueCardsScrollModifiers = 0.0f; // px
+    float rogueCardsScrollOp = 0.0f;        // px
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
 
     // Cached menu layout (computed using real font metrics to keep input + render aligned).
