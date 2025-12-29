@@ -2,6 +2,7 @@
 #include "game/GameAssets.hpp"
 #include "game/GameConfig.hpp"
 #include "game/GameState.hpp"
+#include "game/rogue/RogueCards.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -86,6 +87,7 @@ void renderWorld(const RenderContext& ctx, const GameState& state, const GameCon
 
     // Paddle
     glm::vec3 currentPaddleSize = cfg.paddleSize;
+    if (state.gameType == GameType::ROGUE) currentPaddleSize.x *= game::rogue::basePaddleScaleX(state);
     if (state.expandTimer > 0.0f) currentPaddleSize.x *= cfg.expandScaleFactor;
     if (state.tinyTimer > 0.0f) currentPaddleSize.x *= cfg.tinyScaleFactor;
     ctx.renderer.drawMesh(assets.paddle, state.paddlePos, currentPaddleSize, tint);

@@ -13,7 +13,7 @@ namespace game::render::hud {
 
 void drawDangerZoneHud(const RenderContext& ctx, const GameState& state) {
     // --- DANGER ZONE FILTER (draw BEFORE pause/gameover overlay so overlays stay on top) ---
-    if (!(state.gameType == GameType::ENDLESS &&
+    if (!((state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) &&
           state.endlessDangerActive &&
           (state.mode == GameMode::PLAYING || state.mode == GameMode::PAUSED) &&
           (
@@ -43,7 +43,7 @@ void drawDangerZoneHud(const RenderContext& ctx, const GameState& state) {
         ctx.renderer.drawUIQuad(0.0f, 0.0f, (float)ctx.fbW, screenY, glm::vec4(1.0f, 0.0f, 0.0f, baseA));
     }
 
-    // Danger signs + text (ENDLESS only, show while warning is active)
+    // Danger signs + text (Endless/Rogue, show while warning is active)
     bool veryCloseToDeath = (((state.paddlePos.z - 0.5f) - state.endlessDangerMaxZ) <= (1.33f * 2.0f));
     if (!(state.endlessDangerTimer < 10.0f || veryCloseToDeath)) return;
 
