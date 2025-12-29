@@ -42,11 +42,11 @@ struct GameState {
     int lives = 3;
     int score = 0;
     
-    // Levels mode: current level (1-10)
+    // Levels mode: current level (1-20)
     int currentLevel = 1;
     int levelsBestLevel = 1; // highest level reached (persistent)
-    int levelsCompletedStars[10] = {0,0,0,0,0,0,0,0,0,0}; // 0-3 stars per level
-    int hoveredLevelButton = -1; // -1 = none, 0-9 = level index
+    int levelsCompletedStars[20] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 0-3 stars per level
+    int hoveredLevelButton = -1; // -1 = none, 0-19 = level index
     
     // Endless mode: persistent best score (loaded on init, updated/saved during play)
     int endlessBestScore = 0;
