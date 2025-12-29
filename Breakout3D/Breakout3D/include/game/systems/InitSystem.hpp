@@ -12,6 +12,9 @@ public:
     // Generate bricks for a level/wave
     static void generateBricks(GameState& state, const GameConfig& cfg, int waveNumber = 0);
     
+    // Generate bricks from a specific level layout (Levels mode)
+    static void generateBricksFromLevel(GameState& state, const GameConfig& cfg, int levelNumber);
+    
     // Spawn incremental bricks (for endless mode)
     static void spawnIncrementalBricks(GameState& state, const GameConfig& cfg, int count, int waveNumber);
     
