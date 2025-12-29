@@ -5,6 +5,7 @@
 #include "game/systems/PhysicsSystem.hpp"
 #include "game/ui/OverlayLayout.hpp"
 #include "game/ui/InstructionsOverlayLayout.hpp"
+#include "game/rogue/RogueCards.hpp"
 #include "engine/Window.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -83,10 +84,126 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             state.powerupInspectDragging = false;
         }
 
+        // Rogue cards browser interactions (tab 2)
+        if (state.instructionsTab == 2) {
+            // Rebuild the same grouped list used by MenuRender, so hitboxes match visuals.
+            std::vector<game::rogue::RogueCardId> powerups;
+            std::vector<game::rogue::RogueCardId> modifiers;
+            std::vector<game::rogue::RogueCardId> ops;
+            for (auto id : game::rogue::allCardIds()) {
+                const auto& def = game::rogue::cardDef(id);
+                if (def.isOp) ops.push_back(id);
+                else if (game::rogue::isPowerupCard(id)) powerups.push_back(id);
+                else modifiers.push_back(id);
+            }
+
+            float contentX = OL.modelRect.x;
+            float contentY = OL.modelRect.y;
+            float contentW = (OL.infoRect.x + OL.infoRect.w) - contentX;
+            float contentH = OL.modelRect.h;
+            float gap = 22.0f * menu.uiScale;
+            float colW = (contentW - 2.0f * gap) / 3.0f;
+            float colX0 = contentX;
+            float colX1 = contentX + colW + gap;
+            float colX2 = contentX + (colW + gap) * 2.0f;
+
+            float itemH = 54.0f * menu.uiScale;
+            float itemGap = 10.0f * menu.uiScale;
+            float step = itemH + itemGap;
+            float viewTopY = contentY + contentH - 80.0f * menu.uiScale;
+            float viewBottomY = contentY + 30.0f * menu.uiScale;
+            float viewH = std::max(1.0f, viewTopY - viewBottomY);
+
+            auto maxScrollFor = [&](const std::vector<game::rogue::RogueCardId>& ids) -> float {
+                float totalH = std::max(0.0f, (float)ids.size() * step - itemGap);
+                return std::max(0.0f, totalH - viewH);
+            };
+
+            auto hitList = [&](float x, float scrollPx, const std::vector<game::rogue::RogueCardId>& ids, int baseIndex) {
+                float maxScroll = maxScrollFor(ids);
+                scrollPx = std::clamp(scrollPx, 0.0f, maxScroll);
+
+                float y = viewTopY + scrollPx;
+                for (size_t i = 0; i < ids.size(); ++i) {
+                    if (y < viewBottomY) break;
+                    game::ui::Rect R{x, y - itemH, colW, itemH};
+                    if (R.contains(px, py)) {
+                        state.hoveredRogueCardsItem = baseIndex + (int)i;
+                        return true;
+                    }
+                    y -= step;
+                }
+                return false;
+            };
+
+            // Default: no hover unless over an item.
+            state.hoveredRogueCardsItem = -1;
+
+            // Modal: if open, clicking outside closes it.
+            if (state.rogueCardsInspectOpen) {
+                float cardWBase = 420.0f;
+                float cardHBase = 900.0f;
+                float s = std::min((float)fbW / (cardWBase + 120.0f), (float)fbH / (cardHBase + 160.0f));
+                s = std::max(0.65f, std::min(1.45f, s));
+                float cardW = cardWBase * s;
+                float cardH = cardHBase * s;
+                float cx = ((float)fbW - cardW) * 0.5f;
+                float cy = ((float)fbH - cardH) * 0.5f;
+                game::ui::Rect cardRect{cx, cy, cardW, cardH};
+
+                if (click && !cardRect.contains(px, py)) {
+                    state.rogueCardsInspectOpen = false;
+                    return true;
+                }
+                // While modal is open, don't interact with the list.
+            } else {
+                int base0 = 0;
+                int base1 = base0 + (int)powerups.size();
+                int base2 = base1 + (int)modifiers.size();
+
+                bool hit = false;
+                hit = hitList(colX0, state.rogueCardsScrollPowerups, powerups, base0) || hit;
+                hit = hitList(colX1, state.rogueCardsScrollModifiers, modifiers, base1) || hit;
+                hit = hitList(colX2, state.rogueCardsScrollOp, ops, base2) || hit;
+
+                // Wheel scrolling: each column scrolls independently when hovered.
+                float wheel = input.mouseScrollY();
+                if (std::abs(wheel) > 1e-4f) {
+                    auto applyScroll = [&](float& scrollPx, const std::vector<game::rogue::RogueCardId>& ids) {
+                        float maxScroll = maxScrollFor(ids);
+                        const float speed = 42.0f * menu.uiScale; // px per wheel notch-ish
+                        scrollPx -= wheel * speed; // GLFW: +wheel = scroll up
+                        scrollPx = std::clamp(scrollPx, 0.0f, maxScroll);
+                    };
+
+                    bool inY = (py >= viewBottomY && py <= viewTopY);
+                    if (inY && px >= colX0 && px <= colX0 + colW) applyScroll(state.rogueCardsScrollPowerups, powerups);
+                    else if (inY && px >= colX1 && px <= colX1 + colW) applyScroll(state.rogueCardsScrollModifiers, modifiers);
+                    else if (inY && px >= colX2 && px <= colX2 + colW) applyScroll(state.rogueCardsScrollOp, ops);
+                }
+
+                if (click && hit && state.hoveredRogueCardsItem >= 0) {
+                    int idx = state.hoveredRogueCardsItem;
+                    if (idx < base1) {
+                        state.rogueCardsSelected = powerups[(size_t)idx];
+                    } else if (idx < base2) {
+                        state.rogueCardsSelected = modifiers[(size_t)(idx - base1)];
+                    } else {
+                        state.rogueCardsSelected = ops[(size_t)(idx - base2)];
+                    }
+                    state.rogueCardsInspectOpen = true;
+                    return true;
+                }
+            }
+        } else {
+            state.hoveredRogueCardsItem = -1;
+        }
+
         if (click) {
             // Click on BACK = close overlay
             if (state.hoveredCloseButton) {
                 state.showInstructions = false;
+                state.rogueCardsInspectOpen = false;
             }
         }
         return true; // Menu is handling input
@@ -138,9 +255,11 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
         float offsetY = -50.0f; // Instructions buttons start lower (matches OPTIONS layout)
         ui::Rect controlsBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
         ui::Rect powerupsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
+        ui::Rect rogueCardsBtn = {menu.btn3.x, menu.btn3.y + offsetY, menu.btn3.w, menu.btn3.h};
 
         if (controlsBtn.contains(px, py)) state.hoveredMenuButton = 0;       // CONTROLS
         else if (powerupsBtn.contains(px, py)) state.hoveredMenuButton = 1;  // POWERUPS
+        else if (rogueCardsBtn.contains(px, py)) state.hoveredMenuButton = 2;  // ROGUE CARDS
         else {
             float s = menu.uiScale;
             float backW = 120.0f * s;
@@ -148,7 +267,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             float backX = menu.panelX + 20.0f * s;
             float backY = menu.panelY + 15.0f * s;
             if (pointInRectPx(px, py, backX, backY, backW, backH)) {
-                state.hoveredMenuButton = 2; // BACK
+                state.hoveredMenuButton = 3; // BACK
             }
         }
     }
@@ -202,8 +321,16 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.mode = GameMode::PLAYING;
                 return true;
             }
-            // ROGUE/LEVELS: coming soon (buttons are drawn as disabled)
-            if (menu.rogue.playBtn.contains(px, py)) return true;
+            // ROGUE Mode
+            if (menu.rogue.playBtn.contains(px, py)) {
+                state.showInstructions = false;
+                state.gameType = GameType::ROGUE;
+                state.wave = 1;
+                state.testOneBrick = false;
+                state.mode = GameMode::PLAYING;
+                return true;
+            }
+            // LEVELS: coming soon (button is drawn as disabled)
             if (menu.levels.playBtn.contains(px, py)) return true;
 
             // BACK
@@ -251,6 +378,18 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 return true;
             }
 
+            ui::Rect rogueCardsBtn = {menu.btn3.x, menu.btn3.y + offsetY, menu.btn3.w, menu.btn3.h};
+            if (rogueCardsBtn.contains(px, py)) {
+                state.instructionsTab = 2;
+                state.showInstructions = true;
+                state.rogueCardsInspectOpen = false;
+                state.hoveredRogueCardsItem = -1;
+                state.rogueCardsScrollPowerups = 0.0f;
+                state.rogueCardsScrollModifiers = 0.0f;
+                state.rogueCardsScrollOp = 0.0f;
+                return true;
+            }
+
             float s = menu.uiScale;
             float backW = 120.0f * s;
             float backH = 50.0f * s;
@@ -267,18 +406,14 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
 }
 
 void InputSystem::handleGameInput(GameState& state, const engine::Input& input, const GameConfig& cfg, engine::Window& window, float dt) {
-    // Toggle Pause with Escape
+    // Only PLAYING/PAUSED participate in the pause toggle.
+    // Special modes like ROGUE_CARDS should fully freeze gameplay input.
     if (input.keyPressed(engine::Key::Escape)) {
-        if (state.mode == GameMode::PLAYING) {
-            state.mode = GameMode::PAUSED;
-        } else if (state.mode == GameMode::PAUSED) {
-            state.mode = GameMode::PLAYING;
-        }
+        if (state.mode == GameMode::PLAYING) state.mode = GameMode::PAUSED;
+        else if (state.mode == GameMode::PAUSED) state.mode = GameMode::PLAYING;
     }
 
-    if (state.mode == GameMode::PAUSED) {
-        return;
-    }
+    if (state.mode != GameMode::PLAYING) return;
 
     auto [fbW, fbH] = window.getFramebufferSize();
 
@@ -320,10 +455,16 @@ void InputSystem::handleGameInput(GameState& state, const engine::Input& input, 
 
     // Ball launching
     for (auto& ball : state.balls) {
+        // Rogue fairness: while queued rows are spawning, keep the ball attached.
+        if (state.gameType == GameType::ROGUE && state.roguePendingRowsToSpawn > 0) {
+            continue;
+        }
         if (ball.attached && input.keyDown(engine::Key::Space)) {
             ball.attached = false;
             glm::vec3 d = glm::normalize(glm::vec3(0.30f, 0.0f, -1.0f));
-            ball.vel = d * cfg.ballSpeed;
+            float sp = cfg.ballSpeed;
+            if (state.gameType == GameType::ROGUE) sp *= game::rogue::ballSpeedMult(state);
+            ball.vel = d * sp;
         }
     }
 }

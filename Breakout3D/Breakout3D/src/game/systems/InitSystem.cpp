@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include "game/systems/RogueSystem.hpp"
 
 namespace game {
 
@@ -61,7 +62,7 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.bricksDestroyedThisWave = 0;
     state.endlessRowsSpawned = 0;
     state.score = 0;
-    state.endlessBestScore = loadEndlessBestScore();
+    state.endlessBestScore = (state.gameType == GameType::ENDLESS) ? loadEndlessBestScore() : 0;
     state.endlessStreakPoints = 0;
     state.endlessStreakPosPoints = 0;
     state.endlessStreakNegPoints = 0;
@@ -104,7 +105,7 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     state.brickHitCooldown = 0.0f;
 
     // Generate bricks (0 for normal, waveNumber for endless)
-    int waveToGenerate = (state.gameType == GameType::ENDLESS) ? state.wave : 0;
+    int waveToGenerate = (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) ? state.wave : 0;
     int rowsInitial = 9;
     if (state.gameType == GameType::ENDLESS) {
         rowsInitial = 9 + (state.wave / 2);
@@ -112,6 +113,11 @@ void InitSystem::initGame(GameState& state, const GameConfig& cfg) {
     generateBricks(state, cfg, waveToGenerate);
     if (state.gameType == GameType::ENDLESS) {
         state.endlessRowsSpawned = rowsInitial;
+    }
+
+    // Rogue: always start with a card pick (2 placeholder cards) before wave 1 begins.
+    if (state.gameType == GameType::ROGUE) {
+        RogueSystem::startRun(state);
     }
 }
 
@@ -121,7 +127,7 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
     const int cols = 12;
     int rows = 9;  // Default for normal mode (may be overridden below)
 
-    // Adjust difficulty for endless mode
+    // Adjust difficulty for endless/rogue mode
     if (waveNumber > 0) {
         rows = 9 + (waveNumber / 2); // Add rows every 2 waves
     }
@@ -185,20 +191,26 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
             // Split wall into Front (closer to paddle) and Back (further away)
             bool isFrontHalf = (r >= rows / 2);
 
-            if (isFrontHalf) {
-                // Front half: Easier bricks
-                int r2 = rand() % 100;
-                if (r2 < 45)      b.maxHp = b.hp = 1;
-                else if (r2 < 85) b.maxHp = b.hp = 2;
-                else              b.maxHp = b.hp = 3;
+            if (state.gameType == GameType::ROGUE && waveNumber > 0) {
+                // Rogue: wave-based difficulty curve, separated into RogueSystem.
+                int hp = RogueSystem::pickBrickHpForWave(waveNumber, isFrontHalf);
+                b.maxHp = b.hp = std::min(6, std::max(1, hp));
             } else {
-                // Back half: Random bricks
-                if (waveNumber == 0) {
-                    b.maxHp = b.hp = pickWeightedBaseHp_1to4();
+                if (isFrontHalf) {
+                    // Front half: Easier bricks
+                    int r2 = rand() % 100;
+                    if (r2 < 45)      b.maxHp = b.hp = 1;
+                    else if (r2 < 85) b.maxHp = b.hp = 2;
+                    else              b.maxHp = b.hp = 3;
                 } else {
-                    int hpBonus = waveNumber / 5;
-                    int baseHp = pickWeightedBaseHp_1to4();
-                    b.maxHp = b.hp = std::min(6, baseHp + hpBonus);
+                    // Back half: Random bricks
+                    if (waveNumber == 0) {
+                        b.maxHp = b.hp = pickWeightedBaseHp_1to4();
+                    } else {
+                        int hpBonus = waveNumber / 5;
+                        int baseHp = pickWeightedBaseHp_1to4();
+                        b.maxHp = b.hp = std::min(6, baseHp + hpBonus);
+                    }
                 }
             }
 
