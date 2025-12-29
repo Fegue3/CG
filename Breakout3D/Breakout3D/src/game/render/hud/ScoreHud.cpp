@@ -121,6 +121,26 @@ void drawScoreAndWaveHud(const RenderContext& ctx, const GameState& state) {
         }
         return;
     }
+    if (state.gameType == GameType::LEVELS) {
+        // LEVELS mode: show current level number
+        std::string levelStr = "LEVEL " + std::to_string(state.currentLevel) + " / 10";
+        float levelScale = 1.60f;
+        float levelH = ctx.renderer.getUIFontLineHeight(levelScale);
+        float levelW = ctx.renderer.measureUITextWidth(levelStr, levelScale);
+        float cx = (float)ctx.fbW * 0.5f;
+        float levelX = cx - levelW * 0.5f;
+        const float topMargin = 18.0f;
+        float levelY = (float)ctx.fbH - topMargin - levelH;
+
+        // Outline for readability
+        glm::vec3 outline(0.02f, 0.02f, 0.06f);
+        ctx.renderer.drawUIText(levelX - 2.0f, levelY, levelStr, levelScale, outline);
+        ctx.renderer.drawUIText(levelX + 2.0f, levelY, levelStr, levelScale, outline);
+        ctx.renderer.drawUIText(levelX, levelY - 2.0f, levelStr, levelScale, outline);
+        ctx.renderer.drawUIText(levelX, levelY + 2.0f, levelStr, levelScale, outline);
+        ctx.renderer.drawUIText(levelX, levelY, levelStr, levelScale, glm::vec4(0.20f, 0.75f, 0.85f, 1.0f));
+        return;
+    }
     if (state.gameType != GameType::ENDLESS) {
         // Normal mode: score HUD removed (per request).
         return;
