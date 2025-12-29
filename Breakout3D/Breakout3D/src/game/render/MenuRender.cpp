@@ -202,7 +202,7 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         // Play modes screen: one card per mode (aligned grid), each with title + description + PLAY button.
         // Hover should scale the ACTUAL card (no extra "invisible backplate" layer), and hovered card should draw last
         // so it can overlap the footer BACK button.
-        auto drawModeCard = [&](int /*idx*/,
+        auto drawModeCard = [&](int idx,
                                 const game::ui::MenuLayout::ModeCard& c,
                                 const std::string& modeTitle,
                                 const std::string& desc,
@@ -307,6 +307,19 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             ctx.renderer.drawUIQuad(c.playBtn.x + btnShadow, c.playBtn.y - btnShadow, c.playBtn.w, c.playBtn.h,
                                     glm::vec4(0,0,0, hovered ? 0.55f : 0.45f));
             ctx.renderer.drawUIQuad(c.playBtn.x, c.playBtn.y, c.playBtn.w, c.playBtn.h, glm::vec4(btnCol, 1.0f));
+
+            // Neon RGB border on PLAY button when the button itself is hovered (matches Rogue PICK hover)
+            bool playHovered = (state.hoveredPlayModeButton == idx);
+            if (playHovered) {
+                float bt2 = 3.0f * uiS;
+                float hueRgb2 = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
+                glm::vec3 neonRgb2 = ui::hsv2rgb(hueRgb2, 0.85f, 1.0f);
+                glm::vec4 borderCol2(neonRgb2, 1.0f);
+                ctx.renderer.drawUIQuad(c.playBtn.x - bt2, c.playBtn.y - bt2, c.playBtn.w + 2 * bt2, bt2, borderCol2);
+                ctx.renderer.drawUIQuad(c.playBtn.x - bt2, c.playBtn.y + c.playBtn.h, c.playBtn.w + 2 * bt2, bt2, borderCol2);
+                ctx.renderer.drawUIQuad(c.playBtn.x - bt2, c.playBtn.y, bt2, c.playBtn.h, borderCol2);
+                ctx.renderer.drawUIQuad(c.playBtn.x + c.playBtn.w, c.playBtn.y, bt2, c.playBtn.h, borderCol2);
+            }
 
             // Button label
             std::string lbl = enabled ? "PLAY" : "SOON";
