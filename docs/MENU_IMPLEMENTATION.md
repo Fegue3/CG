@@ -1,33 +1,67 @@
-# Menu Implementation (Current)
+# Menu / UI Implementation (Current)
 
-This document describes the **current** menu and overlay UI implementation in this repository.
+This document describes the **current** menu system, instructions overlay, and in-game overlays.
 
-> Source code lives under `Breakout3D/Breakout3D/`.
+Source code lives under `Breakout3D/Breakout3D/`.
 
 ---
 
-## Main menu (startup)
+## Game entry / menu state machine
 
-The game starts in `GameMode::MENU` (see `Breakout3D/Breakout3D/include/game/GameState.hpp` and `Breakout3D/Breakout3D/src/main.cpp`).
+The game starts in `GameMode::MENU`.
 
-### Buttons (top → bottom)
+Inside the menu, the UI uses a screen state:
 
-- **NORMAL**: starts a Normal run
-- **ENDLESS**: starts an Endless run
-- **INSTRUCTIONS**: opens the modal instructions panel
+- `MenuScreen::MAIN`
+- `MenuScreen::PLAY_MODES`
+- `MenuScreen::OPTIONS`
+- `MenuScreen::INSTRUCTIONS`
+
+See:
+
+- state: `include/game/GameState.hpp`
+- rendering: `src/game/render/MenuRender.cpp`
+- input/hit-testing: `src/game/systems/InputSystem.cpp`
+
+---
+
+## Main menu (`MenuScreen::MAIN`)
+
+Primary actions:
+
+- **PLAY**: opens `PLAY_MODES`
+- **INSTRUCTIONS**: opens `INSTRUCTIONS`
+- **OPTIONS**: opens `OPTIONS`
 - **EXIT**: closes the window
 
-Implementation:
+---
 
-- Click handling: `Breakout3D/Breakout3D/src/game/systems/InputSystem.cpp` (`handleMenuInput`)
-- Rendering: `Breakout3D/Breakout3D/src/game/Game.cpp` (MENU render path)
+## Play modes (`MenuScreen::PLAY_MODES`)
 
-### Instructions modal
+Play modes include:
 
-When `showInstructions == true`, a centered panel is displayed. Mouse clicks are handled as:
+- **NORMAL**
+- **ENDLESS**
+- **ROGUE**
+- (optional placeholders may exist visually depending on build)
 
-- clicking **outside** the panel closes it
-- clicks inside do nothing (panel is modal)
+Selecting a mode sets `GameState::gameType` and transitions to `GameMode::PLAYING` (or Rogue’s draft overlay flow).
+
+---
+
+## Instructions (`MenuScreen::INSTRUCTIONS`)
+
+Instructions is a tabbed UI:
+
+- **Controls**
+- **Powerups** (includes a powerup inspector and animated GIF previews)
+- **Rogue Cards** (browse all Rogue cards and open a card inspection modal)
+- **Back**
+
+Notes:
+
+- The powerup inspector uses lazy-loaded GIF previews (see `docs/GIF_PREVIEWS.md`).
+- The Rogue Cards browser is driven by `game::rogue::allCardIds()` + `cardDef(...)` metadata.
 
 ---
 
@@ -36,41 +70,33 @@ When `showInstructions == true`, a centered panel is displayed. Mouse clicks are
 ### Pause overlay (`GameMode::PAUSED`)
 
 - Toggle with **Esc** (handled by `InputSystem::handleGameInput`)
-- On pause, an overlay panel is rendered with:
-  - title **PAUSED**
-  - buttons: **RESTART** and **MENU**
+- Buttons:
+  - **RESTART**
+  - **MENU**
 
 ### Game Over / Win overlay
 
-When the game ends:
-
 - **GAME OVER**: loss condition met
-- **WINNER!**: all bricks cleared in Normal mode
+- **WIN**: Normal clears all bricks (after a short “win finisher” cinematic)
+- Buttons:
+  - **RETRY**
+  - **MENU**
 
-Overlay panel shows:
+Overlay layout is centralized so input hit-testing matches render:
 
-- title: `GAME OVER` or `WINNER!`
-- buttons: **RETRY** and **MENU**
-
-Implementation:
-
-- Render: `Breakout3D/Breakout3D/src/game/Game.cpp` (overlay section at end of UI pass)
-- Click logic: `Breakout3D/Breakout3D/src/game/Game.cpp` (GAME_OVER/WIN click handling in `update()`)
+- `include/game/ui/OverlayLayout.hpp`
 
 ---
 
 ## Other UI elements
 
-### Background selector (top-right HUD)
+### Background selector (HUD)
 
-Clickable color boxes that set `GameState::currentBg`. Implemented in:
-
-- Input: `Breakout3D/Breakout3D/src/game/systems/InputSystem.cpp`
-- Render: `Breakout3D/Breakout3D/src/game/Game.cpp`
+Clickable boxes in the HUD set `GameState::currentBg`.
 
 ---
 
-## Window size notes
+## Window size note
 
-Default window is `1280x900` in `Breakout3D/Breakout3D/src/main.cpp` to ensure the large title and menu panel fit without overlap.
+Default window is `1280x900` in `src/main.cpp` to ensure the menu and instructions fit comfortably.
 
