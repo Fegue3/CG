@@ -13,7 +13,7 @@ enum class MouseButton { Left };
 class Input {
 public:
     static constexpr int KEY_COUNT = 17;
-    void update(const Window& window);
+    void update(Window& window);
 
     bool keyDown(Key k) const;
     bool keyPressed(Key k) const;
@@ -24,6 +24,9 @@ public:
     // mouse em pixels do framebuffer (já convertido window->fb)
     std::pair<float,float> mousePosFbPx() const;
 
+    // Mouse wheel scroll delta (Y) since last update() call (positive = scroll up in GLFW).
+    float mouseScrollY() const { return m_scrollY; }
+
 private:
     bool m_keyDown[KEY_COUNT]{};
     bool m_keyPrev[KEY_COUNT]{};
@@ -33,6 +36,7 @@ private:
 
     float m_mouseX = 0.0f;
     float m_mouseY = 0.0f;
+    float m_scrollY = 0.0f;
 };
 
 } // namespace engine
