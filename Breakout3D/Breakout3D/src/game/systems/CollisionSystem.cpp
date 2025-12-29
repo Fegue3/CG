@@ -1,6 +1,7 @@
 #include "game/systems/CollisionSystem.hpp"
 #include "game/entities/Brick.hpp"
 #include "game/systems/PowerUpSystem.hpp"
+#include "game/rogue/RogueCards.hpp"
 #include <algorithm>
 #include <cmath>
 #include <glm/glm.hpp>
@@ -44,7 +45,7 @@ void CollisionSystem::handleWorldCollisions(Ball& ball, const GameConfig& cfg) {
     }
 }
 
-void CollisionSystem::handlePaddleCollision(Ball& ball, const glm::vec3& paddlePos,
+void CollisionSystem::handlePaddleCollision(Ball& ball, const GameState& state, const glm::vec3& paddlePos,
                                             const glm::vec3& paddleSize, const GameConfig& cfg) {
     float halfZ = paddleSize.z * 0.5f;
     float paddleHalfX = paddleSize.x * 0.5f;
@@ -60,20 +61,40 @@ void CollisionSystem::handlePaddleCollision(Ball& ball, const glm::vec3& paddleP
     float dz = ball.pos.z - cz;
 
     if (dx*dx + dz*dz <= cfg.ballRadius*cfg.ballRadius) {
-        // Hitting the front face
-        if (cz == minZ && ball.vel.z > 0.0f) {
-            ball.pos.z = minZ - cfg.ballRadius - 0.002f;
-            float t = (ball.pos.x - paddlePos.x) / paddleHalfX;
-            t = clampf(t, -1.0f, 1.0f);
-            float ang = t * glm::radians(60.0f);
-            ball.vel.x = std::sin(ang) * cfg.ballSpeed;
-            ball.vel.z = -std::cos(ang) * cfg.ballSpeed;
-        }
-        // Hitting the sides
-        else if (cx == minX || cx == maxX) {
+        // Robust resolution: pick the dominant penetration axis (XZ only).
+        float ax = std::abs(dx);
+        float az = std::abs(dz);
+        float speed = glm::length(glm::vec2(ball.vel.x, ball.vel.z));
+        if (speed < 1e-4f) speed = cfg.ballSpeed;
+
+        // Prefer Z resolution unless X penetration is clearly larger.
+        bool resolveX = (ax > az * 1.05f);
+
+        if (resolveX) {
+            // Side faces (left/right) — bounce X.
             ball.vel.x = -ball.vel.x;
             float sideSign = (ball.pos.x < cx) ? -1.0f : 1.0f;
             ball.pos.x = cx + sideSign * (cfg.ballRadius + 0.002f);
+        } else {
+            // Front/back faces — bounce Z and add angle based on hit position.
+            bool frontSide = (ball.pos.z < paddlePos.z);
+
+            // Rogue environment: sticky paddle only when hitting the front face while moving toward it.
+            if (frontSide && ball.vel.z > 0.0f &&
+                state.gameType == GameType::ROGUE && state.rogueStickyPaddle && !ball.isFireball) {
+                ball.attached = true;
+                ball.vel = glm::vec3(0.0f);
+                ball.pos.z = minZ - cfg.ballRadius - 0.002f;
+                return;
+            }
+
+            float t = (ball.pos.x - paddlePos.x) / std::max(0.001f, paddleHalfX);
+            t = clampf(t, -1.0f, 1.0f);
+            float ang = t * glm::radians(60.0f);
+            ball.vel.x = std::sin(ang) * speed;
+            ball.vel.z = (frontSide ? -std::cos(ang) : std::cos(ang)) * speed;
+
+            ball.pos.z = (frontSide ? (minZ - cfg.ballRadius - 0.002f) : (maxZ + cfg.ballRadius + 0.002f));
         }
     }
 }
@@ -103,16 +124,19 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
 
             auto awardBrickPoints = [&](int maxHp, bool immediateScore) -> int {
                 int baseScore = brickPoints(maxHp);
-                int waveBonus = (state.gameType == GameType::ENDLESS) ? (state.wave * 25) : 0;
+                int waveBonus = (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) ? (state.wave * 25) : 0;
                 int pts = baseScore + waveBonus;
+                if (state.gameType == GameType::ROGUE) {
+                    pts = (int)std::round((float)pts * state.rogueBrickPointsMult);
+                }
 
-                if (state.gameType == GameType::ENDLESS) {
+                if (state.gameType == GameType::ENDLESS || state.gameType == GameType::ROGUE) {
                     if (immediateScore) {
                         // Meteor/fireball: push points directly into the visible score.
                         state.score += pts;
                         return pts;
                     }
-                    // Endless: accumulate into a streak bank (committed later by Game::update)
+                    // Endless/Rogue: accumulate into a streak bank (committed later by Game::update)
                     state.endlessStreakPoints += pts;
                     state.endlessStreakPosPoints += pts;
                     state.endlessStreakIdleTimer = 0.0f;
@@ -120,19 +144,21 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                     state.endlessStreakBanking = false;
                     state.endlessStreakBankTimer = 0.0f;
 
-                    // Count destroyed bricks for endless mode spawning
-                    state.bricksDestroyedThisWave++;
-                    // Softer ramp: early game requires MORE bricks (easier),
-                    // then gradually returns to the classic 15 as time goes on.
-                    const float t = state.endlessElapsedTime;
-                    float u = (t <= 120.0f) ? 0.0f : std::min(1.0f, (t - 120.0f) / 480.0f); // 0..1 from 2min to 10min
-                    int required = (int)std::round(22.0f - (7.0f * u)); // 22 -> 15
-                    if (required < 15) required = 15;
-                    if (required > 22) required = 22;
+                    if (state.gameType == GameType::ENDLESS) {
+                        // Count destroyed bricks for endless mode spawning
+                        state.bricksDestroyedThisWave++;
+                        // Softer ramp: early game requires MORE bricks (easier),
+                        // then gradually returns to the classic 15 as time goes on.
+                        const float t = state.endlessElapsedTime;
+                        float u = (t <= 120.0f) ? 0.0f : std::min(1.0f, (t - 120.0f) / 480.0f); // 0..1 from 2min to 10min
+                        int required = (int)std::round(22.0f - (7.0f * u)); // 22 -> 15
+                        if (required < 15) required = 15;
+                        if (required > 22) required = 22;
 
-                    if (state.bricksDestroyedThisWave >= required) {
-                        state.pendingSpawnBricks += 12;
-                        state.bricksDestroyedThisWave -= required;
+                        if (state.bricksDestroyedThisWave >= required) {
+                            state.pendingSpawnBricks += 12;
+                            state.bricksDestroyedThisWave -= required;
+                        }
                     }
                 } else {
                     state.score += pts;
@@ -148,8 +174,17 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 state.lastBrickDestroyedValid = true;
                 state.lastBrickDestroyedPos = b.pos;
 
+                // Rogue wave progression counts destroyed bricks (quota-based waves).
+                if (state.gameType == GameType::ROGUE) {
+                    state.rogueBricksBrokenThisWave++;
+                }
+
                 if (allowPowerupDrop) {
-                    PowerUpSystem::spawnPowerUp(state, b.pos, cfg.powerUpChance);
+                    float chance = cfg.powerUpChance;
+                    if (state.gameType == GameType::ROGUE) {
+                        chance = game::rogue::effectiveDropChance(state, cfg);
+                    }
+                    PowerUpSystem::spawnPowerUp(state, b.pos, chance);
                 }
 
                 return awardBrickPoints(b.maxHp, fireballActive);
@@ -160,6 +195,9 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 int explosionPts = 0;
                 // Kill neighbors first so "last brick" detection can be correct.
                 float r = cfg.fireballExplosionRadius;
+                if (state.gameType == GameType::ROGUE) {
+                    r *= std::max(0.25f, state.rogueFireballRadiusMult);
+                }
                 float r2 = r * r;
 
                 for (auto& other : state.bricks) {
@@ -230,7 +268,11 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 return true;
             } else {
                 // Normal hit: damage 1
-                br.hp--;
+                int dmg = 1;
+                if (state.gameType == GameType::ROGUE) {
+                    dmg += std::max(0, state.rogueBrickDamageBonus);
+                }
+                br.hp -= dmg;
                 if (br.hp <= 0) {
                     // If this was the LAST brick (normal mode), keep a visual copy for the brief slow-down
                     // so the player sees it "break" exactly when the finisher burst starts.
