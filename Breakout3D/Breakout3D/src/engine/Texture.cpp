@@ -47,4 +47,26 @@ Texture2D Texture2D::loadFromFile(const std::string& path, bool flipY) {
     return t;
 }
 
+Texture2D Texture2D::loadFromRGBA(const unsigned char* rgba, int w, int h, bool generateMips) {
+    Texture2D t;
+    if (!rgba || w <= 0 || h <= 0) return t;
+    t.w = w;
+    t.h = h;
+    t.channels = 4;
+
+    glGenTextures(1, &t.id);
+    glBindTexture(GL_TEXTURE_2D, t.id);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    if (generateMips) glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, generateMips ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return t;
+}
+
 } // namespace engine

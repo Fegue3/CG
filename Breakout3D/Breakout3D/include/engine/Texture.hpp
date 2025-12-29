@@ -10,6 +10,7 @@ struct Texture2D {
 
     void destroy();
     static Texture2D loadFromFile(const std::string& path, bool flipY = true);
+    static Texture2D loadFromRGBA(const unsigned char* rgba, int w, int h, bool generateMips = false);
 };
 
 } // namespace engine
