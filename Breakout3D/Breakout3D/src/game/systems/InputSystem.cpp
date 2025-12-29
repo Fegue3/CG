@@ -270,6 +270,48 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.hoveredMenuButton = 3; // BACK
             }
         }
+    } else if (state.currentMenuScreen == MenuScreen::LEVEL_SELECT) {
+        // Level select: hover detection for level buttons
+        // Use custom panel dimensions (same as MenuRender.cpp)
+        float s = menu.uiScale;
+        float levelPanelW = 720.0f * s;
+        float levelPanelH = 420.0f * s;
+        float levelPanelX = ((float)fbW - levelPanelW) * 0.5f;
+        float levelPanelY = ((float)fbH * 0.45f) - levelPanelH * 0.5f;
+        
+        const int totalLevels = 10;
+        const int cols = 5;
+        const int rows = 2;
+        
+        float btnSize = 110.0f * s;
+        float gapX = 25.0f * s;
+        float gapY = 25.0f * s;
+        float gridW = cols * btnSize + (cols - 1) * gapX;
+        float gridH = rows * btnSize + (rows - 1) * gapY;
+        float startX = levelPanelX + (levelPanelW - gridW) * 0.5f;
+        float startY = levelPanelY + 80.0f * s;
+        
+        state.hoveredLevelButton = -1;
+        for (int i = 0; i < totalLevels; i++) {
+            int row = i / cols;
+            int col = i % cols;
+            float x = startX + col * (btnSize + gapX);
+            float y = startY + (rows - 1 - row) * (btnSize + gapY);
+            
+            if (pointInRectPx(px, py, x, y, btnSize, btnSize)) {
+                state.hoveredLevelButton = i;
+                break;
+            }
+        }
+        
+        // BACK button
+        float backW = 120.0f * s;
+        float backH = 50.0f * s;
+        float backX = levelPanelX + 20.0f * s;
+        float backY = levelPanelY + 15.0f * s;
+        if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+            state.hoveredMenuButton = 10; // BACK
+        }
     }
 
     if (click) {
@@ -330,8 +372,12 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.mode = GameMode::PLAYING;
                 return true;
             }
-            // LEVELS: coming soon (button is drawn as disabled)
-            if (menu.levels.playBtn.contains(px, py)) return true;
+            // LEVELS Mode - go to level select screen
+            if (menu.levels.playBtn.contains(px, py)) {
+                state.currentMenuScreen = MenuScreen::LEVEL_SELECT;
+                state.hoveredLevelButton = -1;
+                return true;
+            }
 
             // BACK
             if (menu.backBtn.contains(px, py)) {
@@ -360,6 +406,58 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             float backY = menu.panelY + 15.0f * s;
             if (pointInRectPx(px, py, backX, backY, backW, backH)) {
                 state.currentMenuScreen = MenuScreen::MAIN;
+                return true;
+            }
+        } else if (state.currentMenuScreen == MenuScreen::LEVEL_SELECT) {
+            // Level select screen: grid of 10 level buttons (2 rows x 5 cols)
+            // Use custom panel dimensions (same as MenuRender.cpp)
+            float s = menu.uiScale;
+            float levelPanelW = 720.0f * s;
+            float levelPanelH = 420.0f * s;
+            float levelPanelX = ((float)fbW - levelPanelW) * 0.5f;
+            float levelPanelY = ((float)fbH * 0.45f) - levelPanelH * 0.5f;
+            
+            const int totalLevels = 10;
+            const int cols = 5;
+            const int rows = 2;
+            
+            float btnSize = 110.0f * s;
+            float gapX = 25.0f * s;
+            float gapY = 25.0f * s;
+            float gridW = cols * btnSize + (cols - 1) * gapX;
+            float gridH = rows * btnSize + (rows - 1) * gapY;
+            float startX = levelPanelX + (levelPanelW - gridW) * 0.5f;
+            float startY = levelPanelY + 80.0f * s;
+            
+            // Check level button clicks
+            for (int i = 0; i < totalLevels; i++) {
+                int row = i / cols;
+                int col = i % cols;
+                float x = startX + col * (btnSize + gapX);
+                float y = startY + (rows - 1 - row) * (btnSize + gapY);
+                
+                if (pointInRectPx(px, py, x, y, btnSize, btnSize)) {
+                    // Check if level is unlocked
+                    if (i < state.levelsBestLevel) {
+                        // Start this level
+                        state.showInstructions = false;
+                        state.gameType = GameType::LEVELS;
+                        state.currentLevel = i + 1;
+                        state.testOneBrick = false;
+                        state.mode = GameMode::PLAYING;
+                        return true;
+                    }
+                    return true; // Clicked but locked
+                }
+            }
+            
+            // BACK button
+            float backW = 120.0f * s;
+            float backH = 50.0f * s;
+            float backX = levelPanelX + 20.0f * s;
+            float backY = levelPanelY + 15.0f * s;
+            if (pointInRectPx(px, py, backX, backY, backW, backH)) {
+                state.currentMenuScreen = MenuScreen::PLAY_MODES;
                 return true;
             }
         } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
