@@ -20,11 +20,16 @@ public:
     std::pair<int,int> getFramebufferSize() const;
     std::pair<int,int> getWindowSize() const;
 
+    // Mouse wheel scroll (Y axis). Returns delta accumulated since last call and resets it to 0.
+    float consumeScrollY();
+    void addScrollY(float dy);
+
     // não expõe GLFW types ao game
     void* nativeHandle() const { return m_window; }
 
 private:
     void* m_window = nullptr; // GLFWwindow* escondido
+    float m_scrollY = 0.0f;
 };
 
 } // namespace engine

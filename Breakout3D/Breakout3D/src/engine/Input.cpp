@@ -36,9 +36,10 @@ static int mouseToGlfw(MouseButton b) {
     return GLFW_MOUSE_BUTTON_LEFT;
 }
 
-void Input::update(const Window& window) {
+void Input::update(Window& window) {
     std::copy(std::begin(m_keyDown), std::end(m_keyDown), std::begin(m_keyPrev));
     std::copy(std::begin(m_mouseDown), std::end(m_mouseDown), std::begin(m_mousePrev));
+    m_scrollY = window.consumeScrollY();
 
     GLFWwindow* w = (GLFWwindow*)window.nativeHandle();
 

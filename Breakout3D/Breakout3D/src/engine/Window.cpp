@@ -6,6 +6,12 @@
 
 namespace engine {
 
+static void glfwScrollCb(GLFWwindow* w, double /*xoff*/, double yoff) {
+    auto* self = (Window*)glfwGetWindowUserPointer(w);
+    if (!self) return;
+    self->addScrollY((float)yoff);
+}
+
 Window::Window() {}
 Window::~Window() { destroy(); }
 
@@ -30,6 +36,10 @@ bool Window::create(int width, int height, const std::string& title, bool fullsc
     m_window = w;
     glfwMakeContextCurrent(w);
     glfwSwapInterval(1);
+
+    // Callbacks (scroll, etc.)
+    glfwSetWindowUserPointer(w, this);
+    glfwSetScrollCallback(w, glfwScrollCb);
 
     glewExperimental = GL_TRUE;
     GLenum err = glewInit();
@@ -81,5 +91,13 @@ std::pair<int,int> Window::getWindowSize() const {
     glfwGetWindowSize(w, &ww, &wh);
     return {ww, wh};
 }
+
+float Window::consumeScrollY() {
+    float v = m_scrollY;
+    m_scrollY = 0.0f;
+    return v;
+}
+
+void Window::addScrollY(float dy) { m_scrollY += dy; }
 
 } // namespace engine
