@@ -14,6 +14,7 @@ Inside the menu, the UI uses a screen state:
 
 - `MenuScreen::MAIN`
 - `MenuScreen::PLAY_MODES`
+- `MenuScreen::LEVEL_SELECT` (for LEVELS mode)
 - `MenuScreen::OPTIONS`
 - `MenuScreen::INSTRUCTIONS`
 
@@ -40,16 +41,33 @@ Primary actions:
 
 Play modes include:
 
-- **NORMAL**
-- **ENDLESS**
-- **ROGUE**
+- **NORMAL**: Sequential 20-level progression
+- **ENDLESS**: Infinite random levels
+- **LEVELS**: Custom level select (choose from 20 unique levels)
+- **ROGUE**: Rogue deck-building mode
 - (optional placeholders may exist visually depending on build)
 
-Selecting a mode sets `GameState::gameType` and transitions to `GameMode::PLAYING` (or Rogue’s draft overlay flow).
+Selecting a mode sets `GameState::gameType`. For NORMAL and LEVELS modes, transitions to `MenuScreen::LEVEL_SELECT`. For ROGUE, opens draft overlay flow. For ENDLESS, transitions directly to `GameMode::PLAYING`.
 
 ---
 
-## Instructions (`MenuScreen::INSTRUCTIONS`)
+## Level Select (`MenuScreen::LEVEL_SELECT`)
+
+When NORMAL or LEVELS mode is selected, the player enters the level select screen.
+
+Features:
+
+- **Grid Layout**: 4 rows × 5 columns (20 total levels)
+- **Unlock System**: Only level 1 available initially; beating a level unlocks the next
+- **Visual Feedback**: Hover highlights level button; locked levels appear grayed out
+- **Star Tracking**: Best performance saved as stars (1-3 stars based on remaining lives)
+- **Panel Position**: Synchronized between render and input systems (fbH × 0.40f)
+
+Selecting a level sets `GameState::currentLevel` and transitions to `GameMode::PLAYING`.
+
+See `docs/LEVEL_SELECT_IMPLEMENTATION.md` and `docs/LEVELS_MODE.md` for detailed information.
+
+---
 
 Instructions is a tabbed UI:
 
