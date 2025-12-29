@@ -35,8 +35,22 @@ In the main menu:
 - **Mouse Left Click**
   - **NORMAL**: start Normal mode
   - **ENDLESS**: start Endless mode
+  - **ROGUE**: start Rogue mode
   - **INSTRUCTIONS**: open the instructions panel
   - **EXIT**: quit the game
+
+### Instructions screen / tabs
+
+The instructions screen includes tabs:
+
+- **Controls**: input reference
+- **Powerups**: powerup list + inspector with animated previews (GIFs)
+- **Rogue Cards**: browse all Rogue cards and open a card inspection modal
+
+Implementation references:
+
+- Rendering: `Breakout3D/Breakout3D/src/game/render/MenuRender.cpp`
+- Input/hit-testing: `Breakout3D/Breakout3D/src/game/systems/InputSystem.cpp`
 
 ### Hidden “one brick” test level (non-debug)
 
