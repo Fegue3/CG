@@ -429,10 +429,10 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         drawButton(3, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
         } else if (state.currentMenuScreen == MenuScreen::LEVEL_SELECT) {
         // LEVEL SELECT screen: custom larger panel for level grid
-        float levelPanelW = 720.0f * uiS;
-        float levelPanelH = 420.0f * uiS;  // Smaller height than before
+        float levelPanelW = 800.0f * uiS;
+        float levelPanelH = 650.0f * uiS;  // Increased for 4x5 grid
         float levelPanelX = ((float)ctx.fbW - levelPanelW) * 0.5f;
-        float levelPanelY = ((float)ctx.fbH * 0.45f) - levelPanelH * 0.5f;
+        float levelPanelY = ((float)ctx.fbH * 0.40f) - levelPanelH * 0.5f;  // Moved down to 0.55f
         
         // Draw custom panel for level select
         float shadowOffset = 6.0f * uiS;
@@ -450,10 +450,10 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         ctx.renderer.drawUIQuad(levelPanelX - borderThickness, levelPanelY, borderThickness, levelPanelH, borderColor);
         ctx.renderer.drawUIQuad(levelPanelX + levelPanelW, levelPanelY, borderThickness, levelPanelH, borderColor);
         
-        // LEVEL SELECT screen: 2 rows x 5 columns grid of level buttons (10 total)
-        const int totalLevels = 10;
+        // LEVEL SELECT screen: 4 rows x 5 columns grid of level buttons (20 total)
+        const int totalLevels = 20;
         const int cols = 5;
-        const int rows = 2;
+        const int rows = 4;
         
         // Grid layout
         float btnSize = 110.0f * uiS;
@@ -470,7 +470,7 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             float titleScale = 2.0f * uiS;
             float titleW = ctx.renderer.measureUITextWidth(title, titleScale);
             float titleX = levelPanelX + (levelPanelW - titleW) * 0.5f;
-            float titleY = startY + gridH + 50.0f * uiS;
+            float titleY = levelPanelY + 25.0f * uiS;
             
             // Cyan glow
             glm::vec3 titleColor(0.20f, 0.75f, 0.85f);
