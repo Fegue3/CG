@@ -5,11 +5,14 @@ namespace engine {
 
 class Window;
 
-enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3, K4, K5, K6, K7 };
+// Keys used by the game.
+// Note: number keys map to the TOP ROW digits (GLFW_KEY_0..9), not numpad.
+enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3, K4, K5, K6, K7, K8, K9, K0, Minus };
 enum class MouseButton { Left };
 
 class Input {
 public:
+    static constexpr int KEY_COUNT = 17;
     void update(const Window& window);
 
     bool keyDown(Key k) const;
@@ -22,8 +25,8 @@ public:
     std::pair<float,float> mousePosFbPx() const;
 
 private:
-    bool m_keyDown[13]{};
-    bool m_keyPrev[13]{};
+    bool m_keyDown[KEY_COUNT]{};
+    bool m_keyPrev[KEY_COUNT]{};
 
     bool m_mouseDown[1]{};
     bool m_mousePrev[1]{};
