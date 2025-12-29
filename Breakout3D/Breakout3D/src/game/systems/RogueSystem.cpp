@@ -26,6 +26,7 @@ static void saveRogueBestScore(int best) {
 void RogueSystem::startRun(GameState& state) {
     state.wave = std::max(1, state.wave);
     state.hoveredRogueCard = -1;
+    state.hoveredRogueCardPickButton = -1;
     state.rogueBricksBrokenThisWave = 0;
     state.rogueWaveTimer = 0.0f;
     state.rogueWaveCooldown = 0.0f;
