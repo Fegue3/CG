@@ -182,6 +182,8 @@ struct GameState {
     MenuScreen currentMenuScreen = MenuScreen::MAIN;
     int selectedMenuOption = 0;
     int hoveredMenuButton = -1; // -1 = none, 0-3 for main menu buttons
+    // PLAY_MODES: specific hover for the PLAY button on each mode card (-1 none, 0..3)
+    int hoveredPlayModeButton = -1;
     int hoveredOverlayButton = -1; // -1 = none, 0 = left button, 1 = right button (pause/gameover/win)
     bool hoveredCloseButton = false; // Instructions overlay BACK button (bottom-left)
     bool hoveredTestBadge = false; // ONE BRICK test badge
