@@ -111,9 +111,9 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         ctx.renderer.drawUIText(cx, cy, ch, titleScale, col);
     }
 
-    // Background panel (MAIN/OPTIONS/INSTRUCTIONS screens only). PLAY_MODES uses one card per mode instead.
+    // Background panel (MAIN/OPTIONS/INSTRUCTIONS screens only). PLAY_MODES and LEVEL_SELECT use custom panels.
     // If an Instructions overlay is open, we don't want the underlying screen panel to show through.
-    if (!state.showInstructions && state.currentMenuScreen != MenuScreen::PLAY_MODES) {
+    if (!state.showInstructions && state.currentMenuScreen != MenuScreen::PLAY_MODES && state.currentMenuScreen != MenuScreen::LEVEL_SELECT) {
         float shadowOffset = 6.0f * uiS;
         ctx.renderer.drawUIQuad(panelX + shadowOffset, panelY - shadowOffset, panelW, panelH, glm::vec4(0.0f, 0.0f, 0.0f, 0.5f));
         ctx.renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
@@ -338,9 +338,9 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             glm::vec3(0.75f, 0.25f, 0.85f), true, false);
 
         if (hoveredIdx != 3) drawModeCard(3, L.levels, "LEVELS",
-            "A curated set of stages with layouts, objectives, and difficulty ramps.",
-            {"Hand-made stages and goals.", "Progression and challenge levels.", "Coming soon."},
-            glm::vec3(0.20f, 0.75f, 0.85f), false, false);
+            "A curated set of 10 stages with unique brick layouts.",
+            {"Hand-crafted brick patterns.", "10 progressive levels.", "Win by completing all levels."},
+            glm::vec3(0.20f, 0.75f, 0.85f), true, false);
 
         // BACK button (footer, bottom-left) — draws before hovered card so hovered can overlap it.
         bool backHover = (state.hoveredMenuButton == 4);
@@ -388,9 +388,9 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             glm::vec3(0.75f, 0.25f, 0.85f), true, true);
 
         if (hoveredIdx == 3) drawModeCard(3, L.levels, "LEVELS",
-            "A curated set of stages with layouts, objectives, and difficulty ramps.",
-            {"Hand-made stages and goals.", "Progression and challenge levels.", "Coming soon."},
-            glm::vec3(0.20f, 0.75f, 0.85f), false, true);
+            "A curated set of 10 stages with unique brick layouts.",
+            {"Hand-crafted brick patterns.", "10 progressive levels.", "Win by completing all levels."},
+            glm::vec3(0.20f, 0.75f, 0.85f), true, true);
         } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
         // Options submenu: SOUND (placeholder), GRAPHICS (placeholder), BACK
         drawButton(0, btnX, btn1Y - 50.0f, btnW, btnH, "SOUND", glm::vec3(0.3f, 0.6f, 0.7f), "Coming Soon");
@@ -414,6 +414,105 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         float backX = panelX + 20.0f * uiS;
         float backY = panelY + 15.0f * uiS;
         drawButton(3, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+        } else if (state.currentMenuScreen == MenuScreen::LEVEL_SELECT) {
+        // LEVEL SELECT screen: custom larger panel for level grid
+        float levelPanelW = 720.0f * uiS;
+        float levelPanelH = 420.0f * uiS;  // Smaller height than before
+        float levelPanelX = ((float)ctx.fbW - levelPanelW) * 0.5f;
+        float levelPanelY = ((float)ctx.fbH * 0.45f) - levelPanelH * 0.5f;
+        
+        // Draw custom panel for level select
+        float shadowOffset = 6.0f * uiS;
+        ctx.renderer.drawUIQuad(levelPanelX + shadowOffset, levelPanelY - shadowOffset, levelPanelW, levelPanelH, glm::vec4(0.0f, 0.0f, 0.0f, 0.5f));
+        ctx.renderer.drawUIQuad(levelPanelX, levelPanelY, levelPanelW, levelPanelH, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
+        
+        // Animated border
+        float borderThickness = 3.0f * uiS;
+        float tRgb = ctx.time.now();
+        float hueRgb = std::fmod(0.56f + 0.08f * std::sin(tRgb * 1.2f), 1.0f);
+        glm::vec3 neonRgb = ui::hsv2rgb(hueRgb, 0.85f, 1.0f);
+        glm::vec4 borderColor(neonRgb, 1.0f);
+        ctx.renderer.drawUIQuad(levelPanelX - borderThickness, levelPanelY - borderThickness, levelPanelW + 2*borderThickness, borderThickness, borderColor);
+        ctx.renderer.drawUIQuad(levelPanelX - borderThickness, levelPanelY + levelPanelH, levelPanelW + 2*borderThickness, borderThickness, borderColor);
+        ctx.renderer.drawUIQuad(levelPanelX - borderThickness, levelPanelY, borderThickness, levelPanelH, borderColor);
+        ctx.renderer.drawUIQuad(levelPanelX + levelPanelW, levelPanelY, borderThickness, levelPanelH, borderColor);
+        
+        // LEVEL SELECT screen: 2 rows x 5 columns grid of level buttons (10 total)
+        const int totalLevels = 10;
+        const int cols = 5;
+        const int rows = 2;
+        
+        // Grid layout
+        float btnSize = 110.0f * uiS;
+        float gapX = 25.0f * uiS;
+        float gapY = 25.0f * uiS;
+        float gridW = cols * btnSize + (cols - 1) * gapX;
+        float gridH = rows * btnSize + (rows - 1) * gapY;
+        float startX = levelPanelX + (levelPanelW - gridW) * 0.5f;
+        float startY = levelPanelY + 80.0f * uiS;
+        
+        // Title: "SELECT LEVEL"
+        {
+            std::string title = "SELECT LEVEL";
+            float titleScale = 2.0f * uiS;
+            float titleW = ctx.renderer.measureUITextWidth(title, titleScale);
+            float titleX = levelPanelX + (levelPanelW - titleW) * 0.5f;
+            float titleY = startY + gridH + 50.0f * uiS;
+            
+            // Cyan glow
+            glm::vec3 titleColor(0.20f, 0.75f, 0.85f);
+            ctx.renderer.drawUIText(titleX - 2.0f * uiS, titleY, title, titleScale, glm::vec4(0,0,0,0.6f));
+            ctx.renderer.drawUIText(titleX + 2.0f * uiS, titleY, title, titleScale, glm::vec4(0,0,0,0.6f));
+            ctx.renderer.drawUIText(titleX, titleY - 2.0f * uiS, title, titleScale, glm::vec4(0,0,0,0.6f));
+            ctx.renderer.drawUIText(titleX, titleY + 2.0f * uiS, title, titleScale, glm::vec4(0,0,0,0.6f));
+            ctx.renderer.drawUIText(titleX, titleY, title, titleScale, glm::vec4(titleColor, 1.0f));
+        }
+        
+        // Draw level buttons
+        for (int i = 0; i < totalLevels; i++) {
+            int row = i / cols;
+            int col = i % cols;
+            float x = startX + col * (btnSize + gapX);
+            float y = startY + (rows - 1 - row) * (btnSize + gapY);
+            
+            bool unlocked = (i < state.levelsBestLevel);
+            bool hovered = (state.hoveredLevelButton == i);
+            
+            // Button background
+            float shadow = (hovered ? 5.0f : 3.0f) * uiS;
+            ctx.renderer.drawUIQuad(x + shadow, y - shadow, btnSize, btnSize, glm::vec4(0,0,0, hovered ? 0.6f : 0.5f));
+            
+            glm::vec3 bgColor = unlocked 
+                ? (hovered ? glm::vec3(0.25f, 0.90f, 1.0f) : glm::vec3(0.15f, 0.50f, 0.65f))
+                : glm::vec3(0.12f, 0.12f, 0.15f);
+            float alpha = unlocked ? 0.95f : 0.50f;
+            ctx.renderer.drawUIQuad(x, y, btnSize, btnSize, glm::vec4(bgColor, alpha));
+            
+            // Border
+            float borderThick = (hovered ? 3.5f : 2.5f) * uiS;
+            glm::vec3 borderColor = unlocked ? glm::vec3(0.20f, 0.75f, 0.85f) : glm::vec3(0.25f, 0.25f, 0.30f);
+            ctx.renderer.drawUIQuad(x - borderThick, y - borderThick, btnSize + 2*borderThick, borderThick, glm::vec4(borderColor, 1));
+            ctx.renderer.drawUIQuad(x - borderThick, y + btnSize, btnSize + 2*borderThick, borderThick, glm::vec4(borderColor, 1));
+            ctx.renderer.drawUIQuad(x - borderThick, y, borderThick, btnSize, glm::vec4(borderColor, 1));
+            ctx.renderer.drawUIQuad(x + btnSize, y, borderThick, btnSize, glm::vec4(borderColor, 1));
+            
+            // Level number
+            std::string numStr = std::to_string(i + 1);
+            float numScale = 2.5f * uiS;
+            float numW = ctx.renderer.measureUITextWidth(numStr, numScale);
+            float numX = x + (btnSize - numW) * 0.5f;
+            float numY = y + (btnSize - ctx.renderer.getUIFontLineHeight(numScale)) * 0.5f;
+            
+            glm::vec4 numColor = unlocked ? glm::vec4(1,1,1,1) : glm::vec4(0.4f, 0.4f, 0.45f, 0.8f);
+            ctx.renderer.drawUIText(numX, numY, numStr, numScale, numColor);
+        }
+        
+        // BACK button
+        float backW = 120.0f * uiS;
+        float backH = 50.0f * uiS;
+        float backX = levelPanelX + 20.0f * uiS;
+        float backY = levelPanelY + 15.0f * uiS;
+        drawButton(10, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
         }
     }
 
