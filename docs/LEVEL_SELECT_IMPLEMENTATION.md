@@ -1,13 +1,13 @@
 # Level Select Screen Implementation
 
 ## Overview
-Implementação de um menu de seleção de níveis (level select) para o modo LEVELS, permitindo escolher qual dos 10 níveis jogar em vez de progressão linear automática.
+Menu de seleção de níveis (level select) para o modo LEVELS, permitindo escolher qual dos **20 níveis** jogar em vez de progressão linear automática. Atualizado para suportar sistema de 20 níveis com dificuldade progressiva.
 
 ## Características Implementadas
 
 ### 1. **Menu de Seleção de Níveis**
 - **Acesso**: Ao clicar em PLAY no modo LEVELS, abre o menu de seleção
-- **Layout**: Grade de 2 linhas × 5 colunas (10 níveis totais)
+- **Layout**: Grade de 4 linhas × 5 colunas (**20 níveis totais**)
 - **Design**: Inspirado no screenshot fornecido pelo utilizador
 
 ### 2. **Sistema de Desbloqueio**
@@ -15,6 +15,10 @@ Implementação de um menu de seleção de níveis (level select) para o modo LE
 - Completar um nível **desbloqueia o próximo**
 - `levelsBestLevel` rastreia o nível mais alto alcançado
 - Níveis bloqueados aparecem escurecidos e não são clicáveis
+- **Dificuldade Progressiva**:
+  - Níveis 1-10: Dificuldade variável (HP 1-4)
+  - Níveis 11-15: Dificuldade intermediária (HP mínimo 2)
+  - Níveis 16-20: Dificuldade máxima (HP mínimo 3, grids 12×7-9)
 
 ### 3. **Sistema de Estrelas**
 - **3 estrelas**: Completar nível com 3 vidas restantes
@@ -49,17 +53,21 @@ enum class MenuScreen {
 };
 
 // Novos campos de estado
-int levelsCompletedStars[10] = {0,0,0,0,0,0,0,0,0,0}; // 0-3 estrelas por nível
-int hoveredLevelButton = -1; // -1 = nenhum, 0-9 = índice do nível
+int levelsCompletedStars[20] = {0}; // 0-3 estrelas por nível (agora 20 níveis)
+int hoveredLevelButton = -1; // -1 = nenhum, 0-19 = índice do nível
 ```
 
 #### 2. **MenuRender.cpp**
 - Novo renderizador para `MenuScreen::LEVEL_SELECT`
-- Grade de 10 botões de nível com:
+- Grade de **20 botões** de nível (4 linhas × 5 colunas) com:
   - Número do nível (grande e centralizado)
   - 3 estrelas embaixo (preenchidas conforme desempenho)
   - Cor diferente para níveis bloqueados vs desbloqueados
   - Efeito de hover (brilho e sombra aumentados)
+- **Panel Position**: fbH × 0.40f (synchronized with InputSystem)
+- **Button Size**: 110×110 pixels
+- **Button Spacing**: 25 pixels
+- **Panel Dimensions**: 800×650 pixels
 - Título "SELECT LEVEL" em cyan no topo
 
 #### 3. **InputSystem.cpp**
@@ -68,7 +76,9 @@ int hoveredLevelButton = -1; // -1 = nenhum, 0-9 = índice do nível
   - Detecção de hover para cada botão de nível
   - Detecção de clique com verificação de desbloqueio
   - Botão BACK retorna a `PLAY_MODES`
-- Cálculo de posição da grade idêntico ao rendering
+- **Panel Position**: fbH × 0.40f (synchronized with MenuRender)
+- **Hit Detection Formula**: `screenY = fbH - y - btnSize`
+- Cálculo de posição da grade idêntico ao rendering (20 botões em grid 4×5)
 
 #### 4. **Game.cpp**
 - **Level Complete**: 
@@ -84,10 +94,10 @@ int hoveredLevelButton = -1; // -1 = nenhum, 0-9 = índice do nível
 
 #### Estado de Nível
 ```cpp
-currentLevel          // 1-10: nível atual sendo jogado
-levelsBestLevel       // 1-10: nível mais alto desbloqueado
-levelsCompletedStars[10] // Array de estrelas (0-3) para cada nível
-hoveredLevelButton    // -1 ou 0-9: qual botão tem hover
+currentLevel          // 1-20: nível atual sendo jogado (agora 20 níveis)
+levelsBestLevel       // 1-20: nível mais alto desbloqueado
+levelsCompletedStars[20] // Array de estrelas (0-3) para cada nível (agora 20)
+hoveredLevelButton    // -1 ou 0-19: qual botão tem hover
 ```
 
 ## Fluxo de Utilizador
@@ -137,6 +147,12 @@ LEVEL 1    LEVEL 2    LEVEL 3    LEVEL 4    LEVEL 5
 ☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆
 
 LEVEL 6    LEVEL 7    LEVEL 8    LEVEL 9    LEVEL 10
+☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆
+
+LEVEL 11   LEVEL 12   LEVEL 13   LEVEL 14   LEVEL 15
+☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆
+
+LEVEL 16   LEVEL 17   LEVEL 18   LEVEL 19   LEVEL 20
 ☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆        ☆☆☆
 ```
 
