@@ -538,7 +538,7 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             std::vector<CtrlItem> controls = {
                 {"A / D",   "Move paddle"},
                 {"ARROWS",  "Move paddle"},
-                {"SPACE",   "Launch ball"},
+                {"SPACE",   "Launch ball (towards mouse)"},
                 {"ESC",     "Pause / Resume"},
                 {"1 / 2",   "Change camera"}
             };

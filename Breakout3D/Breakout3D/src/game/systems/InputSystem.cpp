@@ -461,7 +461,31 @@ void InputSystem::handleGameInput(GameState& state, const engine::Input& input, 
         }
         if (ball.attached && input.keyDown(engine::Key::Space)) {
             ball.attached = false;
-            glm::vec3 d = glm::normalize(glm::vec3(0.30f, 0.0f, -1.0f));
+            
+            // Calculate launch direction based on mouse position
+            auto [fbW, fbH] = window.getFramebufferSize();
+            auto [mx_px, my_px_raw] = input.mousePosFbPx();
+            
+            // Convert mouse position from screen space to world space (XZ plane)
+            // Assume arena is roughly centered and map screen to arena bounds
+            float mouseX = cfg.arenaMinX + (mx_px / (float)fbW) * (cfg.arenaMaxX - cfg.arenaMinX);
+            float mouseZ = cfg.arenaMinZ + ((float)fbH - my_px_raw) / (float)fbH * (cfg.arenaMaxZ - cfg.arenaMinZ);
+            
+            // Calculate direction from ball position to mouse position
+            glm::vec3 targetPos(mouseX, ball.pos.y, mouseZ);
+            glm::vec3 direction = targetPos - ball.pos;
+            
+            // Ensure the ball always goes upward (negative Z in game coordinates)
+            if (direction.z > 0.0f) {
+                direction.z = -direction.z;
+            }
+            
+            // Clamp horizontal angle to avoid too extreme angles
+            float horizontalRatio = direction.x / std::abs(direction.z);
+            horizontalRatio = std::clamp(horizontalRatio, -0.8f, 0.8f);
+            direction.x = horizontalRatio * std::abs(direction.z);
+            
+            glm::vec3 d = glm::normalize(direction);
             float sp = cfg.ballSpeed;
             if (state.gameType == GameType::ROGUE) sp *= game::rogue::ballSpeedMult(state);
             ball.vel = d * sp;
