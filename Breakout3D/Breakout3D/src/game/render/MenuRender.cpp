@@ -2,6 +2,7 @@
 
 #include "game/GameAssets.hpp"
 #include "game/GameState.hpp"
+#include "game/rogue/RogueCards.hpp"
 #include "game/render/ui/UIHelpers.hpp"
 #include "game/ui/InstructionsOverlayLayout.hpp"
 #include "game/ui/OverlayLayout.hpp"
@@ -333,8 +334,8 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
 
         if (hoveredIdx != 2) drawModeCard(2, L.rogue, "ROGUE",
             "Build a run by choosing upgrades and taking risks — every decision shapes the next round.",
-            {"Draft upgrades after milestones.", "Synergies, trade-offs, and run variety.", "Coming soon."},
-            glm::vec3(0.75f, 0.25f, 0.85f), false, false);
+            {"Draft reward cards after wave milestones.", "No random drops — choices define your run.", "Wave-based progression (prototype)."},
+            glm::vec3(0.75f, 0.25f, 0.85f), true, false);
 
         if (hoveredIdx != 3) drawModeCard(3, L.levels, "LEVELS",
             "A curated set of stages with layouts, objectives, and difficulty ramps.",
@@ -383,8 +384,8 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
 
         if (hoveredIdx == 2) drawModeCard(2, L.rogue, "ROGUE",
             "Build a run by choosing upgrades and taking risks — every decision shapes the next round.",
-            {"Draft upgrades after milestones.", "Synergies, trade-offs, and run variety.", "Coming soon."},
-            glm::vec3(0.75f, 0.25f, 0.85f), false, true);
+            {"Draft reward cards after wave milestones.", "No random drops — choices define your run.", "Wave-based progression (prototype)."},
+            glm::vec3(0.75f, 0.25f, 0.85f), true, true);
 
         if (hoveredIdx == 3) drawModeCard(3, L.levels, "LEVELS",
             "A curated set of stages with layouts, objectives, and difficulty ramps.",
@@ -402,16 +403,17 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         float backY = panelY + 15.0f * uiS;
         drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
         } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
-        // Instructions screen: CONTROLS, POWERUPS, BACK (buttons open the detailed overlay panel)
+        // Instructions screen: CONTROLS, POWERUPS, ROGUE CARDS, BACK (buttons open the detailed overlay panel)
         drawButton(0, btnX, btn1Y - 50.0f, btnW, btnH, "CONTROLS", glm::vec3(0.3f, 0.6f, 0.7f), "View");
         drawButton(1, btnX, btn2Y - 50.0f, btnW, btnH, "POWERUPS", glm::vec3(0.6f, 0.3f, 0.7f), "View");
+        drawButton(2, btnX, btn3Y - 50.0f, btnW, btnH, "ROGUE CARDS", glm::vec3(0.85f, 0.55f, 0.15f), "Browse");
 
         // BACK button
         float backW = 120.0f * uiS;
         float backH = 50.0f * uiS;
         float backX = panelX + 20.0f * uiS;
         float backY = panelY + 15.0f * uiS;
-        drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+        drawButton(3, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
         }
     }
 
@@ -469,7 +471,7 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
 
         // Overlay fill:
         // - Controls: solid panel for readability.
-        // - Powerups: 2-widget look — NO big background panel (model sits directly on background).
+        // - Powerups/Rogue Cards: NO big background panel (content floats on background).
         if (state.instructionsTab == 0) {
             ctx.renderer.drawUIQuad(instrX, instrY, instrW, instrH, glm::vec4(0.05f, 0.05f, 0.1f, 0.98f));
         }
@@ -489,15 +491,18 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         }
 
         // Title with glow + underline (tab-aware)
-        std::string instrTitle = (state.instructionsTab == 0) ? "CONTROLS" : "POWERUPS";
+        std::string instrTitle =
+            (state.instructionsTab == 0) ? "CONTROLS" :
+            (state.instructionsTab == 1) ? "POWERUPS" :
+            "ROGUE CARDS";
         float instrTitleScale = 1.6f * uiS;
         float instrTitleW = ctx.renderer.measureUITextWidth(instrTitle, instrTitleScale);
         float instrTitleX = instrX + (instrW - instrTitleW) * 0.5f;
-        // Powerups title should sit lower so it doesn't crowd the big "BREAKOUT 3D" header.
-        float titleTopPad = (state.instructionsTab == 1) ? (96.0f * uiS) : (42.0f * uiS);
+        // Powerups/RogueCards title should sit lower so it doesn't crowd the big "BREAKOUT 3D" header.
+        float titleTopPad = (state.instructionsTab == 1 || state.instructionsTab == 2) ? (96.0f * uiS) : (42.0f * uiS);
         float instrTitleY = instrY + instrH - titleTopPad;
-        // In Powerups (no panel fill), add a tiny backdrop behind the title only (keeps it readable).
-        if (state.instructionsTab == 1) {
+        // In Powerups/Rogue Cards (no panel fill), add a tiny backdrop behind the title only (keeps it readable).
+        if (state.instructionsTab == 1 || state.instructionsTab == 2) {
             float padX = 26.0f * uiS;
             float padY = 12.0f * uiS;
             float th = ctx.renderer.getUIFontLineHeight(instrTitleScale);
@@ -697,6 +702,157 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
                 float indS = 0.70f * uiS;
                 float indW = ctx.renderer.measureUITextWidth(ind, indS);
                 ctx.renderer.drawUIText(R.x + (R.w - indW) * 0.5f, OL.navLeft.y + 16.0f * uiS, ind, indS, glm::vec4(1,1,1,0.70f));
+            }
+        }
+
+        if (state.instructionsTab == 2) {
+            // --- ROGUE CARDS BROWSER ---
+            // Group all cards into Powerups / Modifiers / OP.
+            std::vector<game::rogue::RogueCardId> powerups;
+            std::vector<game::rogue::RogueCardId> modifiers;
+            std::vector<game::rogue::RogueCardId> ops;
+            for (auto id : game::rogue::allCardIds()) {
+                const auto& def = game::rogue::cardDef(id);
+                if (def.isOp) ops.push_back(id);
+                else if (game::rogue::isPowerupCard(id)) powerups.push_back(id);
+                else modifiers.push_back(id);
+            }
+
+            // Content region = union of model+info rects.
+            float contentX = OL.modelRect.x;
+            float contentY = OL.modelRect.y;
+            float contentW = (OL.infoRect.x + OL.infoRect.w) - contentX;
+            float contentH = OL.modelRect.h;
+
+            float gap = 22.0f * uiS;
+            float colW = (contentW - 2.0f * gap) / 3.0f;
+            float colH = contentH;
+            float colX0 = contentX;
+            float colX1 = contentX + colW + gap;
+            float colX2 = contentX + (colW + gap) * 2.0f;
+
+            auto drawColHeader = [&](float x, const char* title, glm::vec3 tint) {
+                float s = 1.05f * uiS;
+                float tw = ctx.renderer.measureUITextWidth(title, s);
+                ctx.renderer.drawUIText(x + (colW - tw) * 0.5f, contentY + colH - 34.0f * uiS, title, s, tint);
+            };
+
+            drawColHeader(colX0, "POWERUPS", glm::vec3(0.35f, 0.85f, 1.0f));
+            drawColHeader(colX1, "MODIFIERS", glm::vec3(0.85f, 0.35f, 1.0f));
+            drawColHeader(colX2, "OP", glm::vec3(1.0f, 0.80f, 0.15f));
+
+            int base0 = 0;
+            int base1 = base0 + (int)powerups.size();
+            int base2 = base1 + (int)modifiers.size();
+            // Scrollable columns: clip each column list and apply independent scroll offsets.
+            // IMPORTANT: scissor must include border thickness, otherwise vertical borders get clipped.
+            auto drawListScrollable = [&](float x, float scrollPx,
+                                         const std::vector<game::rogue::RogueCardId>& ids, int baseIndex) {
+                float padX = 10.0f * uiS;
+                float itemH = 54.0f * uiS;
+                float itemGap = 10.0f * uiS;
+                float step = itemH + itemGap;
+                float viewTopY = contentY + colH - 80.0f * uiS;
+                float viewBottomY = contentY + 30.0f * uiS;
+                float viewH = std::max(1.0f, viewTopY - viewBottomY);
+                float totalH = std::max(0.0f, (float)ids.size() * step - itemGap);
+                float maxScroll = std::max(0.0f, totalH - viewH);
+                if (scrollPx < 0.0f) scrollPx = 0.0f;
+                if (scrollPx > maxScroll) scrollPx = maxScroll;
+
+                float bt = 3.0f * uiS;
+                // Clip to column viewport (expanded by border thickness).
+                ctx.renderer.uiSetScissor(true, x - bt, viewBottomY - bt, colW + 2.0f * bt, viewH + 2.0f * bt);
+
+                float y = viewTopY + scrollPx;
+                for (size_t i = 0; i < ids.size(); ++i) {
+                    // Skip items above the viewport quickly.
+                    if ((y - itemH) > (viewTopY + itemH)) { y -= step; continue; }
+                    if (y < viewBottomY) break;
+
+                    int idx = baseIndex + (int)i;
+                    bool hovered = (state.hoveredRogueCardsItem == idx) && !state.rogueCardsInspectOpen;
+                    bool selected = (state.rogueCardsSelected == ids[i]);
+                    // Outline colors should match the card itself, but feel "neon".
+                    glm::vec3 acc = game::rogue::cardAccent(ids[i]);
+                    glm::vec3 neonAcc = glm::clamp(acc * 1.55f + glm::vec3(0.08f), glm::vec3(0.0f), glm::vec3(1.0f));
+
+                    glm::vec4 bg(0.06f, 0.06f, 0.10f, hovered ? 0.96f : 0.88f);
+                    ctx.renderer.drawUIQuad(x, y - itemH, colW, itemH, bg);
+
+                    float hue = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
+                    glm::vec3 neon = ui::hsv2rgb(hue, 0.85f, 1.0f);
+                    // Default outline: subtle accent-colored border (matches the "mode cards" vibe).
+                    // Hover/selected: neon RGB highlight.
+                    glm::vec4 border = (hovered || selected)
+                        ? glm::vec4(neon, 1.0f)
+                        : glm::vec4(neonAcc, 0.92f);
+                    ctx.renderer.drawUIQuad(x - bt, y - itemH - bt, colW + 2 * bt, bt, border);
+                    ctx.renderer.drawUIQuad(x - bt, y, colW + 2 * bt, bt, border);
+                    ctx.renderer.drawUIQuad(x - bt, y - itemH, bt, itemH, border);
+                    ctx.renderer.drawUIQuad(x + colW, y - itemH, bt, itemH, border);
+
+                    const auto& def = game::rogue::cardDef(ids[i]);
+                    std::string nm = def.name;
+                    float nameScale = ui::fitScaleToWidth(ctx.renderer, nm, 0.90f * uiS, colW - 2.0f * padX);
+                    float th = ctx.renderer.getUIFontLineHeight(nameScale);
+                    ctx.renderer.drawUIText(x + padX, (y - itemH) + (itemH - th) * 0.5f, nm, nameScale, glm::vec3(1.0f));
+
+                    y -= step;
+                }
+
+                ctx.renderer.uiSetScissor(false);
+            };
+
+            drawListScrollable(colX0, state.rogueCardsScrollPowerups, powerups, base0);
+            drawListScrollable(colX1, state.rogueCardsScrollModifiers, modifiers, base1);
+            drawListScrollable(colX2, state.rogueCardsScrollOp, ops, base2);
+
+            // Modal inspect overlay: dim the world and show the selected card big in the center.
+            if (state.rogueCardsInspectOpen) {
+                ctx.renderer.drawUIQuad(0, 0, (float)ctx.fbW, (float)ctx.fbH, glm::vec4(0, 0, 0, 0.82f));
+
+                // Big centered card (menu inspector)
+                float cardWBase = 420.0f;
+                float cardHBase = 900.0f;
+                float s = std::min((float)ctx.fbW / (cardWBase + 120.0f), (float)ctx.fbH / (cardHBase + 160.0f));
+                s = std::max(0.65f, std::min(1.45f, s));
+                float cardW = cardWBase * s;
+                float cardH = cardHBase * s;
+                float cx = ((float)ctx.fbW - cardW) * 0.5f;
+                float cy = ((float)ctx.fbH - cardH) * 0.5f;
+
+                game::ui::Rect r{cx, cy, cardW, cardH};
+                auto id = state.rogueCardsSelected;
+                const auto& def = game::rogue::cardDef(id);
+                glm::vec3 acc = game::rogue::cardAccent(id);
+
+                ctx.renderer.drawUIQuad(r.x + 14.0f, r.y - 14.0f, r.w, r.h, glm::vec4(0, 0, 0, 0.66f));
+                ctx.renderer.drawUIQuad(r.x, r.y, r.w, r.h, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
+                float bt = 5.0f;
+                ctx.renderer.drawUIQuad(r.x - bt, r.y - bt, r.w + 2 * bt, bt, glm::vec4(acc, 1.0f));
+                ctx.renderer.drawUIQuad(r.x - bt, r.y + r.h, r.w + 2 * bt, bt, glm::vec4(acc, 1.0f));
+                ctx.renderer.drawUIQuad(r.x - bt, r.y, bt, r.h, glm::vec4(acc, 1.0f));
+                ctx.renderer.drawUIQuad(r.x + r.w, r.y, bt, r.h, glm::vec4(acc, 1.0f));
+
+                std::string nm = def.name;
+                float nameScale = ui::fitScaleToWidth(ctx.renderer, nm, 1.85f, r.w - 70.0f);
+                float nw = ctx.renderer.measureUITextWidth(nm, nameScale);
+                float nh = ctx.renderer.getUIFontLineHeight(nameScale);
+                float nx = r.x + (r.w - nw) * 0.5f;
+                float ny = r.y + r.h - nh - 34.0f;
+                ctx.renderer.drawUIText(nx, ny, nm, nameScale, glm::vec3(1, 1, 1));
+
+                std::string desc = def.shortDesc;
+                float pad = 40.0f;
+                float dScale = 1.25f;
+                ui::drawWrappedText(ctx.renderer, r.x + pad, ny - 150.0f, r.w - 2.0f * pad, desc, dScale,
+                                    glm::vec4(0.93f, 0.97f, 1.0f, 0.95f), 12.0f);
+
+                std::string hint = "CLICK OUTSIDE TO CLOSE";
+                float hS = 0.62f;
+                float hw = ctx.renderer.measureUITextWidth(hint, hS);
+                ctx.renderer.drawUIText(r.x + (r.w - hw) * 0.5f, r.y + 26.0f, hint, hS, glm::vec3(0.8f, 0.9f, 1.0f));
             }
         }
 

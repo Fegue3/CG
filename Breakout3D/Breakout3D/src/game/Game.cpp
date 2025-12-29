@@ -6,11 +6,14 @@
 #include "game/systems/PhysicsSystem.hpp"
 #include "game/systems/CollisionSystem.hpp"
 #include "game/systems/PowerUpSystem.hpp"
+#include "game/systems/RogueSystem.hpp"
+#include "game/rogue/RogueCards.hpp"
 #include "game/effects/WinFinisher.hpp"
 #include "game/render/RenderContext.hpp"
 #include "game/render/UIRender.hpp"
 #include "game/render/WorldRender.hpp"
 #include "game/ui/OverlayLayout.hpp"
+#include "game/ui/RogueCardLayout.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -157,6 +160,34 @@ void Game::update(const engine::Input& input) {
     // Handle game input (pause, paddle movement, ball launch, etc.)
     InputSystem::handleGameInput(m_state, input, m_cfg, m_window, dt);
 
+    // ROGUE: card pick UI logic (pause gameplay, click to choose).
+    if (m_state.mode == GameMode::ROGUE_CARDS) {
+        auto [fbW, fbH] = m_window.getFramebufferSize();
+        auto [px, py_raw] = input.mousePosFbPx();
+        float py = (float)fbH - py_raw;
+        bool click = input.mousePressed(engine::MouseButton::Left);
+
+        const auto L = game::ui::rogueCardOverlay(fbW, fbH);
+
+        // Update hover state
+        m_state.hoveredRogueCard = -1;
+        if (m_state.rogueOfferCount > 0 && L.cardA.contains(px, py)) m_state.hoveredRogueCard = 0;
+        else if (m_state.rogueOfferCount > 1 && L.cardB.contains(px, py)) m_state.hoveredRogueCard = 1;
+        else if (m_state.rogueOfferCount > 2 && L.cardC.contains(px, py)) m_state.hoveredRogueCard = 2;
+
+        if (click) {
+            if (m_state.hoveredRogueCard >= 0 && m_state.hoveredRogueCard < m_state.rogueOfferCount) {
+                game::rogue::applyPickedCard(m_state, m_cfg, m_state.rogueOffer[m_state.hoveredRogueCard]);
+                // If we exited the card overlay (i.e., draft is done), start row spawn cadence.
+                if (m_state.mode == GameMode::PLAYING) {
+                    m_state.rogueRowSpawnTimer = 0.15f;
+                }
+                return;
+            }
+        }
+        return;
+    }
+
     // PAUSED: Click UI logic for buttons
     if (m_state.mode == GameMode::PAUSED) {
         auto [fbW, fbH] = m_window.getFramebufferSize();
@@ -207,6 +238,17 @@ void Game::update(const engine::Input& input) {
         m_state.endlessAutoTimer += dt;
         if (m_state.mode == GameMode::PLAYING) {
             m_state.endlessElapsedTime += dt;
+        }
+    }
+    if (m_state.gameType == GameType::ROGUE) {
+        if (m_state.rogueWaveCooldown > 0.0f) {
+            m_state.rogueWaveCooldown = std::max(0.0f, m_state.rogueWaveCooldown - dt);
+        }
+        if (m_state.rogueRowSpawnTimer > 0.0f) {
+            m_state.rogueRowSpawnTimer = std::max(0.0f, m_state.rogueRowSpawnTimer - dt);
+        }
+        if (m_state.mode == GameMode::PLAYING) {
+            m_state.rogueWaveTimer += dt;
         }
     }
     if (m_state.expandTimer > 0.0f) m_state.expandTimer = std::max(0.0f, m_state.expandTimer - dt);
@@ -319,6 +361,7 @@ void Game::update(const engine::Input& input) {
 
     // Calculate current paddle size for collisions
     glm::vec3 currentPaddleSize = m_cfg.paddleSize;
+    if (m_state.gameType == GameType::ROGUE) currentPaddleSize.x *= game::rogue::basePaddleScaleX(m_state);
     if (m_state.expandTimer > 0.0f) currentPaddleSize.x *= m_cfg.expandScaleFactor;
     if (m_state.tinyTimer > 0.0f) currentPaddleSize.x *= m_cfg.tinyScaleFactor;
 
@@ -330,7 +373,7 @@ void Game::update(const engine::Input& input) {
         CollisionSystem::handleWorldCollisions(ball, m_cfg);
 
         // Paddle collision
-        CollisionSystem::handlePaddleCollision(ball, m_state.paddlePos, currentPaddleSize, m_cfg);
+        CollisionSystem::handlePaddleCollision(ball, m_state, m_state.paddlePos, currentPaddleSize, m_cfg);
 
         // Brick collisions
         CollisionSystem::handleBrickCollisions(ball, m_state, m_cfg);
@@ -358,12 +401,17 @@ void Game::update(const engine::Input& input) {
         m_state.pendingRespawnAfterFireball = false;
     }
 
-    // Endless score streak logic:
+    // NOTE: Rogue wave progression is handled later (quota/time), not by clearing all bricks.
+
+    // Endless/Rogue score streak logic:
     // Points accumulate into `endlessStreakPoints` as bricks are destroyed.
     // If no new points arrive for ~2.5s, we play a short "banking" animation,
     // then commit the streak into the main score.
-    if (m_state.gameType == GameType::ENDLESS && m_state.mode == GameMode::PLAYING) {
-        const float idleToBank = 2.5f;   // ~2-3 seconds
+    if ((m_state.gameType == GameType::ENDLESS || m_state.gameType == GameType::ROGUE) && m_state.mode == GameMode::PLAYING) {
+        float idleToBank = 2.5f;   // ~2-3 seconds
+        if (m_state.gameType == GameType::ROGUE) {
+            idleToBank *= std::max(0.35f, m_state.rogueBankIdleMult);
+        }
         const float bankAnim = 0.55f;    // short float-up
 
         if (m_state.endlessStreakPoints != 0) {
@@ -378,8 +426,62 @@ void Game::update(const engine::Input& input) {
                 if (m_state.endlessStreakBankTimer >= bankAnim) {
                     commitEndlessStreak(m_state);
                     maybeUpdateEndlessBest(m_state);
+                    RogueSystem::maybeUpdateRogueBest(m_state);
                 }
             }
+        }
+    }
+
+    // Rogue: wave progression is NOT "clear all bricks".
+    // We advance when either:
+    // - enough bricks were broken this wave (quota), OR
+    // - enough time has elapsed (time limit),
+    // gated by a small cooldown to prevent double-advances.
+    if (m_state.gameType == GameType::ROGUE && m_state.mode == GameMode::PLAYING && m_state.rogueWaveCooldown <= 0.0f) {
+        int required = RogueSystem::bricksRequiredForWave(m_state.wave);
+        float minT = RogueSystem::minTimeForWave(m_state.wave);
+        float limit = RogueSystem::timeLimitForWave(m_state.wave);
+        bool quotaMet = (m_state.rogueWaveTimer >= minT) && (m_state.rogueBricksBrokenThisWave >= required);
+        bool timeMet = (m_state.rogueWaveTimer >= limit);
+
+        if (quotaMet || timeMet) {
+            int clearedWave = std::max(1, m_state.wave);
+            // Make sure banked points count before we move on.
+            commitEndlessStreak(m_state);
+            RogueSystem::maybeUpdateRogueBest(m_state);
+
+            if (RogueSystem::shouldWinAfterClearingWave(m_state, clearedWave)) {
+                m_state.mode = GameMode::WIN;
+                m_state.balls.clear();
+                m_state.powerups.clear();
+                return;
+            }
+
+            m_state.wave = clearedWave + 1;
+            RogueSystem::onWaveAdvanced(m_state);
+
+            // Next wave: queue rows to insert. They will spawn AFTER the player picks a card,
+            // gradually, not all at once.
+            m_state.roguePendingRowsToSpawn = RogueSystem::rowsToInsertForWave(m_state, m_state.wave);
+
+            if (RogueSystem::shouldOfferCardsAfterClearingWave(m_state, clearedWave)) {
+                // OP pack on the START of waves 3/6/9/... (i.e. after clearing 2/5/8/...)
+                int nextWave = std::max(1, clearedWave + 1);
+                bool opPack = (nextWave % 3) == 0 && nextWave >= 3;
+                game::rogue::dealOffer(m_state, 3, opPack, nextWave);
+                m_state.mode = GameMode::ROGUE_CARDS;
+                m_state.hoveredRogueCard = -1;
+            }
+            return;
+        }
+    }
+
+    // Rogue: after a card pick, insert queued rows gradually (one row per interval).
+    if (m_state.gameType == GameType::ROGUE && m_state.mode == GameMode::PLAYING && m_state.roguePendingRowsToSpawn > 0) {
+        if (m_state.rogueRowSpawnTimer <= 0.0f) {
+            RogueSystem::spawnWaveRows(m_state, m_cfg, /*rowsToInsert=*/1);
+            m_state.roguePendingRowsToSpawn--;
+            m_state.rogueRowSpawnTimer = m_state.rogueRowSpawnInterval;
         }
     }
 
@@ -449,6 +551,42 @@ void Game::update(const engine::Input& input) {
         }
     }
 
+    // Rogue mode: danger warning + brick-reached-paddle lose condition (same visual language as Endless).
+    if (m_state.gameType == GameType::ROGUE) {
+        float limitZ = m_state.paddlePos.z - 0.5f;
+        float warningThresholdZ = limitZ - (1.33f * 3.0f);
+
+        float maxZFound = -20.0f;
+        bool anyAlive = false;
+
+        for (const auto& br : m_state.bricks) {
+            if (!br.alive) continue;
+            anyAlive = true;
+            float brMaxZ = br.pos.z + br.size.z * 0.5f;
+            if (brMaxZ > maxZFound) maxZFound = brMaxZ;
+
+            if (brMaxZ >= limitZ) {
+                // About to lose: commit any pending streak so it counts.
+                commitEndlessStreak(m_state);
+                RogueSystem::maybeUpdateRogueBest(m_state);
+                m_state.mode = GameMode::GAME_OVER;
+                m_state.balls.clear();
+                break;
+            }
+        }
+
+        if (m_state.mode != GameMode::GAME_OVER) {
+            m_state.endlessDangerActive = (anyAlive && maxZFound >= warningThresholdZ);
+            if (m_state.endlessDangerActive) {
+                m_state.endlessDangerTimer += dt;
+                m_state.endlessDangerMaxZ = maxZFound;
+            } else {
+                m_state.endlessDangerTimer = 0.0f;
+                m_state.endlessDangerMaxZ = -20.0f;
+            }
+        }
+    }
+
     // Update power-ups
     PowerUpSystem::updatePowerUps(m_state, m_cfg, dt);
 
@@ -456,17 +594,28 @@ void Game::update(const engine::Input& input) {
     if (!m_state.winFinisherActive && m_state.balls.empty()) {
         m_state.lives--;
         // Losing a heart = -points (but Fireball one-shot respawn does NOT reach this path).
-        if (m_cfg.lifeLossPenalty > 0) {
+        int lossPenalty = m_cfg.lifeLossPenalty;
+        if (m_state.gameType == GameType::ROGUE) {
+            lossPenalty += m_state.rogueLifeLossPenaltyBonus;
+            if (lossPenalty < 0) lossPenalty = 0;
+        }
+        if (lossPenalty > 0) {
             if (m_state.gameType == GameType::ENDLESS) {
                 // Same "bank" logic as the white streak popup:
                 // deduct into the bank now, commit later.
-                m_state.endlessStreakPoints -= m_cfg.lifeLossPenalty;
-                m_state.endlessStreakNegPoints += m_cfg.lifeLossPenalty;
+                m_state.endlessStreakPoints -= lossPenalty;
+                m_state.endlessStreakNegPoints += lossPenalty;
+                m_state.endlessStreakIdleTimer = 0.0f;
+                m_state.endlessStreakBanking = false;
+                m_state.endlessStreakBankTimer = 0.0f;
+            } else if (m_state.gameType == GameType::ROGUE) {
+                m_state.endlessStreakPoints -= lossPenalty;
+                m_state.endlessStreakNegPoints += lossPenalty;
                 m_state.endlessStreakIdleTimer = 0.0f;
                 m_state.endlessStreakBanking = false;
                 m_state.endlessStreakBankTimer = 0.0f;
             } else {
-                m_state.score = std::max(0, m_state.score - m_cfg.lifeLossPenalty);
+                m_state.score = std::max(0, m_state.score - lossPenalty);
                 // Normal mode: don't show score popups.
             }
         }
@@ -478,6 +627,10 @@ void Game::update(const engine::Input& input) {
             if (m_state.gameType == GameType::ENDLESS) {
                 commitEndlessStreak(m_state);
                 maybeUpdateEndlessBest(m_state);
+            }
+            if (m_state.gameType == GameType::ROGUE) {
+                commitEndlessStreak(m_state);
+                RogueSystem::maybeUpdateRogueBest(m_state);
             }
             m_state.mode = InitSystem::anyBricksAlive(m_state) ? GameMode::GAME_OVER : GameMode::WIN;
         }
@@ -563,7 +716,7 @@ void Game::render() {
     // so the UI pass can apply a filter only from that line downwards.
     // User requested a clean rectangular band (straight line), so we use a single Y.
     float dangerLineScreenY = -1.0f; // UI pixels, origin at bottom
-    if (m_state.gameType == GameType::ENDLESS && m_state.endlessDangerActive) {
+    if ((m_state.gameType == GameType::ENDLESS || m_state.gameType == GameType::ROGUE) && m_state.endlessDangerActive) {
         // NOTE: brick row step in InitSystem is ~1.33 (brickSize.z 1.30 + gapZ ~0.03).
         // Using +1.33f starts the filter one row BELOW the bricks. We want it to cover the next row up,
         // so we project the actual front edge of the bricks (no extra offset).
