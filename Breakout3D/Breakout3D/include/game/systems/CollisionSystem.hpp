@@ -11,7 +11,7 @@ public:
     static void handleWorldCollisions(Ball& ball, const GameConfig& cfg);
     
     // Handle paddle collision
-    static void handlePaddleCollision(Ball& ball, const glm::vec3& paddlePos, 
+    static void handlePaddleCollision(Ball& ball, const GameState& state, const glm::vec3& paddlePos,
                                       const glm::vec3& paddleSize, const GameConfig& cfg);
     
     // Handle brick collisions - returns true if a collision occurred
