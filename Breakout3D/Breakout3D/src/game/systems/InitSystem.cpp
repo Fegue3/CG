@@ -119,11 +119,19 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
     state.bricks.clear();
     
     const int cols = 12;
-    int rows = 9;  // Default for normal mode
+    int rows = 9;  // Default for normal mode (may be overridden below)
 
     // Adjust difficulty for endless mode
     if (waveNumber > 0) {
         rows = 9 + (waveNumber / 2); // Add rows every 2 waves
+    }
+    // Normal mode preset layout:
+    // - 3 rows green (1 HP)
+    // - 1 row yellow (2 HP)
+    // - 1 row blue (3 HP)
+    // - 1 row purple (4 HP)
+    if (waveNumber == 0) {
+        rows = 6;
     }
 
     glm::vec3 brickSize(2.95f, 0.7f, 1.30f); 
@@ -158,16 +166,16 @@ void InitSystem::generateBricks(GameState& state, const GameConfig& cfg, int wav
             b.pos.z = startZ + r * (brickSize.z + gapZ);
 
             // Normal mode: single preset level (from closest-to-paddle -> farthest)
-            // 3 rows green (1 HP), then 2 rows yellow (2 HP),
-            // then 2 rows blue (3 HP), then 2 rows purple (4 HP).
+            // 3 rows green (1 HP), then 1 row yellow (2 HP),
+            // then 1 row blue (3 HP), then 1 row purple (4 HP).
             if (waveNumber == 0) {
                 int hp = 1;
                 // NOTE: r grows towards the paddle (increasing Z).
                 // So the "first" rows the player sees (near the paddle) are the highest r.
-                if (r >= 6) hp = 1;         // green (3 rows closest)
-                else if (r >= 4) hp = 2;    // yellow (next 2 rows)
-                else if (r >= 2) hp = 3;    // blue (next 2 rows)
-                else hp = 4;                // purple (2 rows farthest)
+                if (r >= 3) hp = 1;         // green (3 rows closest): r = 3,4,5
+                else if (r == 2) hp = 2;    // yellow (next 1 row)
+                else if (r == 1) hp = 3;    // blue (next 1 row)
+                else hp = 4;                // purple (1 row farthest): r = 0
 
                 b.maxHp = b.hp = hp;
                 state.bricks.push_back(b);
