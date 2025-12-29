@@ -195,14 +195,16 @@ In `PLAYING` mode:
 - **3** (`K3`)
   - **Endless only**: forces a manual incremental brick row spawn (for testing pressure/lose-condition).
 
-- **4** (`K4`)
-  - Spawns a **TINY** power-up at the paddle.
-- **5** (`K5`)
-  - Spawns a **FIREBALL** power-up at the paddle.
-- **6** (`K6`)
-  - Spawns a **SHIELD** power-up at the paddle.
-- **7** (`K7`)
-  - Spawns a **REVERSE** power-up at the paddle.
+- **Power-up spawner (top-row keys, NOT numpad)**
+  - Spawns the chosen power-up near the brick/top side so it **drops like a normal power-up**.
+  - **8** (`K8`): **EXPAND**
+  - **9** (`K9`): **EXTRA_BALL**
+  - **0** (`K0`): **EXTRA_LIFE**
+  - **-** (`Minus`): **SLOW**
+  - **4** (`K4`): **TINY**
+  - **5** (`K5`): **FIREBALL**
+  - **6** (`K6`): **SHIELD**
+  - **7** (`K7`): **REVERSE**
 
 Implementation reference: `game/Game.cpp` (debug section guarded by `#ifdef BREAKOUT3D_DEBUG`).
 
