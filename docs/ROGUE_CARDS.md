@@ -118,12 +118,9 @@ These are permanent modifiers applied immediately on pick.
 
 ## Environment / creative modifier cards
 
-- **WIND: RIGHT** (`MOD_WIND_RIGHT`)
-  - `rogueWindX += 3.2`
-  - `rogueDropChanceMult *= 1.08`
-  - `roguePaddleSpeedMult *= 0.92`
-- **WIND: LEFT** (`MOD_WIND_LEFT`)
-  - `rogueWindX -= 3.2`
+- **WIND: CHAOTIC** (`MOD_WIND_RANDOM`)
+  - `rogueRandomWindActive = true`
+  - balls are pushed left or right **randomly every 0.3 seconds**
   - `rogueDropChanceMult *= 1.08`
   - `roguePaddleSpeedMult *= 0.92`
 - **CENTERED ARENA** (`MOD_CENTERED_ARENA`)
