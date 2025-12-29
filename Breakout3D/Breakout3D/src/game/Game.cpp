@@ -67,26 +67,34 @@ void Game::init() {
 void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
+    // Preload powerup GIF previews asynchronously while the game is running,
+    // so opening the Powerups inspector never stalls.
+    m_assets.startPowerupVideoPreload();
+    m_assets.pumpPowerupVideoPreload(6);
+
 #ifdef BREAKOUT3D_DEBUG
-    // Debug: spawn specific powerups at the paddle (so you're not waiting on RNG).
-    // K4: TINY, K5: FIREBALL, K6: SHIELD, K7: REVERSE
+    // Debug: spawn specific powerups (so you're not waiting on RNG).
+    // These use TOP-ROW keys (not numpad).
     if (m_state.mode == GameMode::PLAYING) {
-        if (input.keyPressed(engine::Key::K4)) {
-            PowerUp p; p.type = PowerUpType::TINY; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
+        auto spawnDebugDrop = [&](PowerUpType type) {
+            PowerUp p;
+            p.type = type;
+            // Spawn near the brick/top side so it "drops" across the arena like normal drops.
+            // Bricks start at cfg.arenaMinZ + 0.85f (see InitSystem.cpp).
+            p.pos = glm::vec3(m_state.paddlePos.x, 0.4f, m_cfg.arenaMinZ + 0.85f);
             m_state.powerups.push_back(p);
-        }
-        if (input.keyPressed(engine::Key::K5)) {
-            PowerUp p; p.type = PowerUpType::FIREBALL; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
-            m_state.powerups.push_back(p);
-        }
-        if (input.keyPressed(engine::Key::K6)) {
-            PowerUp p; p.type = PowerUpType::SHIELD; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
-            m_state.powerups.push_back(p);
-        }
-        if (input.keyPressed(engine::Key::K7)) {
-            PowerUp p; p.type = PowerUpType::REVERSE; p.pos = m_state.paddlePos + glm::vec3(0, 0.4f, -2.0f);
-            m_state.powerups.push_back(p);
-        }
+        };
+
+        // PowerUpType binds (top-row digits + '-' key)
+        if (input.keyPressed(engine::Key::K8)) spawnDebugDrop(PowerUpType::EXPAND);
+        if (input.keyPressed(engine::Key::K9)) spawnDebugDrop(PowerUpType::EXTRA_BALL);
+        if (input.keyPressed(engine::Key::K0)) spawnDebugDrop(PowerUpType::EXTRA_LIFE);
+        if (input.keyPressed(engine::Key::Minus)) spawnDebugDrop(PowerUpType::SLOW);
+
+        if (input.keyPressed(engine::Key::K4)) spawnDebugDrop(PowerUpType::TINY);
+        if (input.keyPressed(engine::Key::K5)) spawnDebugDrop(PowerUpType::FIREBALL);
+        if (input.keyPressed(engine::Key::K6)) spawnDebugDrop(PowerUpType::SHIELD);
+        if (input.keyPressed(engine::Key::K7)) spawnDebugDrop(PowerUpType::REVERSE);
     }
 #endif
 

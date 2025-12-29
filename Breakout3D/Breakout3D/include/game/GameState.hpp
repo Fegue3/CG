@@ -121,6 +121,13 @@ struct GameState {
     bool hoveredTestBadge = false; // ONE BRICK test badge
     bool showInstructions = false;
     int instructionsTab = 0; // 0 = Controls, 1 = Powerups
+    // Powerups inspector (Instructions -> Powerups overlay)
+    int powerupInspectIndex = 0;
+    float powerupInspectYaw = 0.0f;
+    float powerupInspectPitch = 0.0f;
+    bool powerupInspectDragging = false;
+    glm::vec2 powerupInspectLastMouse = glm::vec2(0.0f);
+    int hoveredPowerupNav = -1; // -1 none, 0 left, 1 right
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
 
     // Cached menu layout (computed using real font metrics to keep input + render aligned).
