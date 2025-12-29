@@ -125,6 +125,7 @@ struct GameState {
     };
     int rogueOfferCount = 0;
     int hoveredRogueCard = -1; // -1 none, 0..2
+    int hoveredRogueCardPickButton = -1; // -1 none, 0..2 (specific to PICK button hover)
 
     // Chosen cards (no repeats) and "drop deck" (powerup types that can drop from bricks).
     std::vector<game::rogue::RogueCardId> rogueChosen;
@@ -150,6 +151,8 @@ struct GameState {
     int rogueLifeLossPenaltyBonus = 0; // additive penalty in addition to cfg.lifeLossPenalty
     int rogueRowsPerWaveDelta = 0;      // negative reduces rows inserted per wave (Row Control)
     float rogueWindX = 0.0f;            // environment: constant lateral wind applied to balls
+    bool rogueRandomWindActive = false; // environment: random wind pushes balls left/right
+    float rogueRandomWindTimer = 0.0f;  // internal timer for random wind updates
     float roguePaddleClampMarginX = 0.0f; // environment: reduces paddle range from walls
     bool rogueStickyPaddle = false;     // environment: balls stick to paddle on hit (non-fireball)
     int rogueMaxWaves = 10; // run ends (WIN) after clearing this wave number
