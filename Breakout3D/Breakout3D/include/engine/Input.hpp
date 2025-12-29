@@ -7,12 +7,12 @@ class Window;
 
 // Keys used by the game.
 // Note: number keys map to the TOP ROW digits (GLFW_KEY_0..9), not numpad.
-enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3, K4, K5, K6, K7, K8, K9, K0, Minus };
+enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3, K4, K5, K6, K7, K8, K9, K0, Minus, L };
 enum class MouseButton { Left };
 
 class Input {
 public:
-    static constexpr int KEY_COUNT = 17;
+    static constexpr int KEY_COUNT = 18;
     void update(Window& window);
 
     bool keyDown(Key k) const;
