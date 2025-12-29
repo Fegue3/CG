@@ -4,6 +4,7 @@
 #include "game/entities/Ball.hpp"
 #include "game/systems/PhysicsSystem.hpp"
 #include "game/ui/OverlayLayout.hpp"
+#include "game/ui/InstructionsOverlayLayout.hpp"
 #include "engine/Window.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -23,31 +24,64 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     // Get cached menu layout (computed using real font metrics; must match UIRender.cpp)
     const ui::MenuLayout& menu = state.menuLayout;
 
-    // If instructions overlay is shown, only allow clicking on the BACK button (bottom-left)
+    // If instructions overlay is shown, handle BACK + (Powerups tab) inspector interactions.
     if (state.showInstructions) {
         state.hoveredMenuButton = -1; // No button hovered when instructions are shown
-        // Must match UIRender.cpp exactly
-        float instrW = std::min(980.0f, (float)fbW * 0.75f);
-        float instrH = std::min(690.0f, (float)fbH * 0.72f);
-        float instrX = ((float)fbW - instrW) * 0.5f;
-        float instrY = std::max(40.0f, ((float)fbH - instrH) * 0.5f - 60.0f);
-
-        // Keep the overlay BELOW the big title (match OverlayLayout.cpp spacing).
-        const float titlePanelGap = 26.0f;
-        float maxTopY = menu.titleY - titlePanelGap; // y-up
-        if (instrY + instrH > maxTopY) {
-            instrY = maxTopY - instrH;
-            instrY = std::max(40.0f, instrY);
-        }
-
-        // BACK button position (bottom-left corner of panel)
-        float backW = 150.0f;
-        float backH = 56.0f;
-        float backX = instrX + 22.0f;
-        float backY = instrY + 16.0f;
+        const auto OL = ui::instructionsOverlayLayout(menu, fbW, fbH, state.instructionsTab);
 
         // Update hover state for BACK button
-        state.hoveredCloseButton = pointInRectPx(px, py, backX, backY, backW, backH);
+        state.hoveredCloseButton = OL.backBtn.contains(px, py);
+        state.hoveredPowerupNav = -1;
+
+        // Powerups inspector interactions (only on tab 1)
+        if (state.instructionsTab == 1) {
+            // Hover arrows
+            if (OL.navLeft.contains(px, py)) state.hoveredPowerupNav = 0;
+            else if (OL.navRight.contains(px, py)) state.hoveredPowerupNav = 1;
+
+            bool down = input.mouseDown(engine::MouseButton::Left);
+
+            // Drag rotate the model in the left viewport
+            if (down && OL.modelRect.contains(px, py)) {
+                if (!state.powerupInspectDragging) {
+                    state.powerupInspectDragging = true;
+                    state.powerupInspectLastMouse = glm::vec2(px, py);
+                } else {
+                    glm::vec2 cur(px, py);
+                    glm::vec2 d = cur - state.powerupInspectLastMouse;
+                    state.powerupInspectLastMouse = cur;
+
+                    const float k = 0.0105f;
+                    state.powerupInspectYaw += d.x * k;
+                    state.powerupInspectPitch += d.y * k;
+                    // keep pitch in a nice range (avoid flip chaos)
+                    const float lim = 1.45f;
+                    if (state.powerupInspectPitch > lim) state.powerupInspectPitch = lim;
+                    if (state.powerupInspectPitch < -lim) state.powerupInspectPitch = -lim;
+                }
+            } else {
+                state.powerupInspectDragging = false;
+            }
+
+            // Click arrows to switch powerups (wrap)
+            if (click) {
+                const int count = 8; // must match render list in MenuRender.cpp
+                if (state.hoveredPowerupNav == 0) {
+                    state.powerupInspectIndex = (state.powerupInspectIndex - 1 + count) % count;
+                    state.powerupInspectYaw = 0.0f;
+                    state.powerupInspectPitch = 0.0f;
+                    return true;
+                }
+                if (state.hoveredPowerupNav == 1) {
+                    state.powerupInspectIndex = (state.powerupInspectIndex + 1) % count;
+                    state.powerupInspectYaw = 0.0f;
+                    state.powerupInspectPitch = 0.0f;
+                    return true;
+                }
+            }
+        } else {
+            state.powerupInspectDragging = false;
+        }
 
         if (click) {
             // Click on BACK = close overlay
@@ -59,6 +93,8 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     }
 
     state.hoveredCloseButton = false;
+    state.hoveredPowerupNav = -1;
+    state.powerupInspectDragging = false;
 
     // Check hover on test badge (only on MAIN menu)
     state.hoveredTestBadge = false;
