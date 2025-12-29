@@ -180,3 +180,11 @@ Each system is stateless (static functions) and operates on `GameState`:
 - “Wave” (`GameState::wave`) exists for Endless but is **not currently incremented**, so any wave-based bonus is constant within a run.
 - The best-score persistence path exists in two places (Init/Game). This is fine but could be deduplicated if desired.
 
+---
+
+## Related engineering docs
+
+- `docs/RENDERING_OPENGL.md` (rendering pipeline and OpenGL constraints)
+- `docs/THREADING.md` (async GIF preview decoding/upload)
+- `docs/ROGUE_MODE.md` and `docs/ROGUE_CARDS.md` (Rogue systems and cards)
+

@@ -1,20 +1,36 @@
-# Breakout3D — Project Context
+# Breakout3D — Project Context (Current)
 
-This document gives a high-level and technically accurate overview of the **current** Breakout3D implementation in this repository.
+This document is a **high-level, code-accurate** description of what is currently implemented in this repository.
 
-> Source code lives under `Breakout3D/Breakout3D/` (engine + game).
+Source code lives under `Breakout3D/Breakout3D/`.
 
 ---
 
-## Overview
+## What the project is
 
-**Breakout3D** is a 3D version of classic Breakout for a Computer Graphics course:
+**Breakout3D** is a 3D Breakout for a Computer Graphics course:
 
 - **Language**: C++17
 - **Graphics**: OpenGL (GLEW + GLFW)
 - **Math**: GLM
 - **Gameplay plane**: mostly **XZ** (Y is used for visuals/camera/UI placement)
-- **Default window**: `1280x900` (see `Breakout3D/Breakout3D/src/main.cpp`)
+- **Default window**: `1280x900` (see `src/main.cpp`)
+
+---
+
+## What’s implemented (feature checklist)
+
+- **3D gameplay**: paddle/ball/bricks/walls, 3D meshes, lighting shader
+- **UI**: menu, overlays (pause/game over/win), instructions with tabs
+- **Modes**:
+  - **Normal**: clear all bricks to win (plays a short “win finisher” before the WIN overlay)
+  - **Endless**: survival with continuous row insertion and streak-bank scoring + best score persistence
+  - **Rogue**: wave-based run with **Rogue cards** (drafting between waves + at run start), best score persistence
+- **Power-ups / curses**:
+  - Good: `EXPAND`, `EXTRA_BALL`, `EXTRA_LIFE`, `FIREBALL`, `SHIELD`
+  - Curses: `SLOW`, `REVERSE`, `TINY`
+- **Animated GIF previews** in Instructions → Powerups:
+  - CPU decode on worker threads, GPU upload on the main thread (OpenGL context owner)
 
 ---
 
@@ -22,88 +38,75 @@ This document gives a high-level and technically accurate overview of the **curr
 
 The project is split into two layers:
 
-### Engine layer (`Breakout3D/Breakout3D/include/engine`, `Breakout3D/Breakout3D/src/engine`)
+### Engine layer (`include/engine`, `src/engine`)
 
-- **`Window`**: creates the GLFW window, input/event pump, framebuffer sizing, swap.
+- **`Window`**: GLFW window + OpenGL context, framebuffer sizing, event pump, swap.
 - **`Input`**: key/mouse state, edge detection, mouse position in framebuffer pixels.
 - **`Time`**: frame timing (`delta`).
 - **`Shader`**: GLSL program compilation + uniform helpers.
-- **`Texture`**: texture loading/binding.
+- **`Texture`**: texture loading/binding (+ `stb_image` decode).
 - **`Mesh`**: OBJ/MTL loading and GPU buffers.
 - **`Renderer`**:
-  - 3D mesh drawing (basic lighting shader).
-  - UI pass (ortho) with quads, triangles, and **TTF font rendering** using `stb_truetype` (baked atlas).
+  - 3D mesh drawing
+  - UI pass (ortho) with quads/triangles + **TTF font rendering** via `stb_truetype` (baked atlas)
 
-### Game layer (`Breakout3D/Breakout3D/include/game`, `Breakout3D/Breakout3D/src/game`)
+### Game layer (`include/game`, `src/game`)
 
-- **`Game`**: orchestrates update + render; owns `GameState` and `GameConfig`.
-- **`GameState`**: all mutable runtime state (balls, bricks, powerups, timers, UI state, mode).
-- **`GameConfig`**: gameplay constants (arena bounds, speeds, power-up params).
-- **Systems** (`game/systems`): logic split by responsibility:
+- **`Game`**: orchestrates update + render; owns `GameState`, `GameConfig`, `GameAssets`.
+- **`GameState`**: all mutable runtime state (entities, timers, UI state, mode/type, Rogue state).
+- **`GameConfig`**: gameplay constants (arena bounds, speeds, durations, VFX tuning).
+- **Systems** (`game/systems`): focused logic modules
   - `InitSystem`, `InputSystem`, `PhysicsSystem`, `CollisionSystem`, `PowerUpSystem`
+  - `RogueSystem` (Rogue wave rules + persistence + row insertion for Rogue)
+
+For deeper architecture notes, see `docs/Breakout3D_Architecture.md`.
 
 ---
 
-## Gameplay (current behavior)
+## Gameplay summary (accurate defaults)
 
 ### Controls
 
-- **A / Left Arrow**: move paddle left
-- **D / Right Arrow**: move paddle right
-- **Space**: launch ball (when attached)
-- **Esc**: pause/resume
-- **1 / 2**: camera mode
-- **Mouse**: menu clicks + background selector
+See `docs/CONTROLS_AND_DEBUG.md` for the full list.
 
-### Modes
+### Power-ups / curses (baseline tuning)
 
-- **Normal mode**:
-  - Goal: destroy all bricks → `WIN`.
-  - Lives: you lose a life when all balls fall out; game ends at 0 lives.
-  - **Score is still tracked internally**, but the **normal-mode score HUD is intentionally hidden** (per project UI changes).
+Config lives in `include/game/GameConfig.hpp`:
 
-- **Endless mode**:
-  - No `WIN` goal; intended as survival.
-  - Bricks are continuously inserted over time and via brick-destroy thresholds.
-  - Ends when bricks reach the paddle’s “death line” (and also if lives hit 0).
-  - Uses a **streak bank** scoring model and persists a best score on disk.
-  - Full details: see `docs/ENDLESS_MODE.md`.
+- **Drop chance**: `cfg.powerUpChance = 0.35` (35%)
+- **Default duration**: `cfg.powerUpDuration = 7.0s`
+- **Specific durations**:
+  - `REVERSE`: `4.25s`
+  - `TINY`: `6.0s`
+  - `SHIELD`: `6.5s`
 
-### Power-ups (drop chance + distribution)
+### Rogue cards
 
-Power-ups are attempted on brick destruction with:
+Rogue cards are implemented under:
 
-- `powerUpChance = 0.40` (40%), `powerUpDuration = 7s` (`Breakout3D/Breakout3D/include/game/GameConfig.hpp`)
+- `include/game/rogue/*` + `src/game/rogue/*` (card definitions, pools, effects)
+- `src/game/systems/RogueSystem.cpp` (wave rules)
 
-If a power-up is spawned, type distribution (current code in `PowerUpSystem.cpp`):
+Full details:
 
-- `EXTRA_BALL`: 45%
-- `EXPAND`: 20%
-- `SLOW`: 17%
-- `EXTRA_LIFE`: 18%
-
-Effects:
-
-- **EXTRA_BALL**: spawns 3 new balls with spread angles.
-- **EXPAND**: temporarily increases paddle width (`expandScaleFactor = 1.6`).
-- **SLOW**: slows paddle speed (`slowSpeedFactor = 0.5`).
-- **EXTRA_LIFE**: adds a life.
+- `docs/ROGUE_MODE.md`
+- `docs/ROGUE_CARDS.md`
 
 ---
 
-## Rendering & UI
+## Rendering & UI (overview)
 
 Rendering is two-pass:
 
-1. **3D pass**: walls, bricks, paddle, balls, power-ups.
+1. **3D pass**: walls, bricks, paddle, balls, power-ups (meshes + lighting shader).
 2. **UI pass** (ortho):
    - hearts/lives HUD
-   - menu UI (Normal/Endless/Instructions/Exit)
+   - menu + instructions overlay (Controls / Powerups / Rogue Cards)
    - overlays (Pause / Game Over / Win)
    - background selector HUD
-   - Endless danger band + “DANGER!” label
+   - Endless/Rogue danger band + “DANGER!” label
 
-UI text uses a TTF baked atlas in `Renderer` (stb_truetype) with a bold Orbitron font by default.
+More details: `docs/RENDERING_OPENGL.md`.
 
 ---
 
