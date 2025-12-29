@@ -2,8 +2,9 @@
 
 #include "game/GameAssets.hpp"
 #include "game/GameState.hpp"
-
+#include "game/rogue/RogueCards.hpp"
 #include <algorithm>
+#include <string>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -36,6 +37,47 @@ void drawLivesHud(const RenderContext& ctx, const GameState& state, const GameAs
             : glm::vec3(0.20f, 0.20f, 0.22f);
 
         ctx.renderer.drawMesh(assets.heart, M, col);
+    }
+
+    // Rogue deck icons (stacked cards) under the hearts.
+    if (state.gameType == GameType::ROGUE && !state.rogueChosen.empty()) {
+        const int cols = 6;
+        const float sz = 30.0f;
+        const float g = 8.0f;
+        // Place below the heart row.
+        float yTopHearts = (float)ctx.fbH - padTop;
+        float yBottomHearts = yTopHearts - hs;
+        float baseY = yBottomHearts - 16.0f - sz;
+        float baseX = padX;
+
+        for (size_t i = 0; i < state.rogueChosen.size(); ++i) {
+            int col = (int)(i % cols);
+            int row = (int)(i / cols);
+            float x = baseX + col * (sz + g);
+            float y = baseY - row * (sz + g);
+
+            glm::vec3 acc = game::rogue::cardAccent(state.rogueChosen[i]);
+            // shadow
+            ctx.renderer.drawUIQuad(x + 2.5f, y - 2.5f, sz, sz, glm::vec4(0, 0, 0, 0.45f));
+            // body
+            ctx.renderer.drawUIQuad(x, y, sz, sz, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
+            // border
+            float bt = 2.0f;
+            ctx.renderer.drawUIQuad(x - bt, y - bt, sz + 2*bt, bt, glm::vec4(acc, 1.0f));
+            ctx.renderer.drawUIQuad(x - bt, y + sz, sz + 2*bt, bt, glm::vec4(acc, 1.0f));
+            ctx.renderer.drawUIQuad(x - bt, y, bt, sz, glm::vec4(acc, 1.0f));
+            ctx.renderer.drawUIQuad(x + sz, y, bt, sz, glm::vec4(acc, 1.0f));
+
+            // label
+            std::string lbl = game::rogue::cardAbbrev(state.rogueChosen[i]);
+            float s = 0.62f;
+            float tw = ctx.renderer.measureUITextWidth(lbl, s);
+            float th = ctx.renderer.getUIFontLineHeight(s);
+            float tx = x + (sz - tw) * 0.5f;
+            float ty = y + (sz - th) * 0.5f;
+            ctx.renderer.drawUIText(tx + 1.0f, ty - 1.0f, lbl, s, glm::vec4(0, 0, 0, 0.55f));
+            ctx.renderer.drawUIText(tx, ty, lbl, s, glm::vec4(1, 1, 1, 0.92f));
+        }
     }
 }
 
