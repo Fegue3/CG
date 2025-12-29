@@ -340,6 +340,26 @@ void Game::update(const engine::Input& input) {
         // IMPORTANT: don't run the rest of the frame (otherwise "no balls" would cost a life).
         return;
     }
+    
+    // Check for LEVEL COMPLETE condition (LEVELS mode only)
+    if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::LEVELS && !InitSystem::anyBricksAlive(m_state)) {
+        // Level completed! Unlock next level if needed
+        if (m_state.currentLevel >= m_state.levelsBestLevel) {
+            m_state.levelsBestLevel = m_state.currentLevel + 1;
+            if (m_state.levelsBestLevel > 10) m_state.levelsBestLevel = 10;
+        }
+        
+        // Trigger finisher cinematic (delays WIN overlay)
+        m_state.winFinisherActive = true;
+        m_state.winFinisherTimer = 0.0f;
+        m_state.winFinisherRealTimer = 0.0f;
+        m_state.winFinisherAnchorValid = m_state.lastBrickDestroyedValid;
+        m_state.winFinisherAnchorPos = m_state.lastBrickDestroyedPos;
+        m_state.balls.clear();
+        m_state.powerups.clear();
+        // IMPORTANT: don't run the rest of the frame (otherwise "no balls" would cost a life).
+        return;
+    }
 
     // GAME OVER / WIN: Click UI logic
     if (m_state.mode == GameMode::GAME_OVER || m_state.mode == GameMode::WIN) {
@@ -356,15 +376,25 @@ void Game::update(const engine::Input& input) {
         else if (L.rightBtn.contains(px, py)) m_state.hoveredOverlayButton = 1;
 
         if (click) {
-            // Left button: Restart
+            // Left button: Restart (for LEVELS mode, restart same level)
             if (L.leftBtn.contains(px, py)) {
-                init();
+                if (m_state.gameType == GameType::LEVELS) {
+                    // Restart the same level (keep currentLevel)
+                    init();
+                } else {
+                    init();
+                }
                 return;
             }
             // Right button: Back to Menu
             if (L.rightBtn.contains(px, py)) {
                 m_state.mode = GameMode::MENU;
-                m_state.currentMenuScreen = MenuScreen::MAIN;
+                // LEVELS mode: return to level select
+                if (m_state.gameType == GameType::LEVELS) {
+                    m_state.currentMenuScreen = MenuScreen::LEVEL_SELECT;
+                } else {
+                    m_state.currentMenuScreen = MenuScreen::MAIN;
+                }
                 m_state.showInstructions = false;
                 return;
             }
