@@ -81,6 +81,27 @@ void PhysicsSystem::updateBalls(GameState& state, const GameConfig& cfg, float d
             }
         }
 
+        // Rogue environment: random chaotic wind, applies random pushes every 0.3s.
+        if (state.gameType == GameType::ROGUE && !b.attached && state.rogueRandomWindActive) {
+            state.rogueRandomWindTimer += dt;
+            if (state.rogueRandomWindTimer >= 0.3f) {
+                // Apply random wind push (left or right)
+                float windForce = 2.8f + (float)(rand() % 20) * 0.08f; // Random between 2.8-4.4
+                if (rand() % 2 == 0) windForce = -windForce; // Random direction
+                
+                float sp = glm::length(glm::vec2(b.vel.x, b.vel.z));
+                b.vel.x += windForce;
+                float sp2 = glm::length(glm::vec2(b.vel.x, b.vel.z));
+                if (sp > 1e-4f && sp2 > 1e-4f) {
+                    float k = sp / sp2;
+                    b.vel.x *= k;
+                    b.vel.z *= k;
+                }
+                
+                state.rogueRandomWindTimer = 0.0f;
+            }
+        }
+
         // Shield barrier: bounce balls back instead of losing them.
         // Positioned a bit "behind" the paddle (towards arenaMaxZ).
         if (state.shieldTimer > 0.0f) {
