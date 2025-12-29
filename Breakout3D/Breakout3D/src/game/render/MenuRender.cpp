@@ -3,6 +3,7 @@
 #include "game/GameAssets.hpp"
 #include "game/GameState.hpp"
 #include "game/render/ui/UIHelpers.hpp"
+#include "game/ui/InstructionsOverlayLayout.hpp"
 #include "game/ui/OverlayLayout.hpp"
 
 #include <algorithm>
@@ -12,6 +13,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace game::render {
 
@@ -109,7 +111,8 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
     }
 
     // Background panel (MAIN/OPTIONS/INSTRUCTIONS screens only). PLAY_MODES uses one card per mode instead.
-    if (state.currentMenuScreen != MenuScreen::PLAY_MODES) {
+    // If an Instructions overlay is open, we don't want the underlying screen panel to show through.
+    if (!state.showInstructions && state.currentMenuScreen != MenuScreen::PLAY_MODES) {
         float shadowOffset = 6.0f * uiS;
         ctx.renderer.drawUIQuad(panelX + shadowOffset, panelY - shadowOffset, panelW, panelH, glm::vec4(0.0f, 0.0f, 0.0f, 0.5f));
         ctx.renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
@@ -184,14 +187,17 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         }
     };
 
-    // Draw buttons based on current menu screen
-    if (state.currentMenuScreen == MenuScreen::MAIN) {
-        // Main menu: PLAY, INSTRUCTIONS, OPTIONS, EXIT
-        drawButton(0, btnX, btn1Y, btnW, btnH, "PLAY", glm::vec3(0.2f, 0.7f, 0.2f), "Game Modes");
-        drawButton(1, btnX, btn2Y, btnW, btnH, "INSTRUCTIONS", glm::vec3(0.3f, 0.5f, 0.8f), "How to Play");
-        drawButton(2, btnX, btn3Y, btnW, btnH, "OPTIONS", glm::vec3(0.7f, 0.5f, 0.2f), "Settings");
-        drawButton(3, btnX, btn4Y, btnW, btnH, "EXIT", glm::vec3(0.7f, 0.2f, 0.2f), "Quit Game");
-    } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
+    // Draw buttons based on current menu screen.
+    // If the Instructions overlay is open, don't draw the underlying screen UI (so it doesn't "bleed through"
+    // when parts of the overlay are intentionally transparent).
+    if (!state.showInstructions) {
+        if (state.currentMenuScreen == MenuScreen::MAIN) {
+            // Main menu: PLAY, INSTRUCTIONS, OPTIONS, EXIT
+            drawButton(0, btnX, btn1Y, btnW, btnH, "PLAY", glm::vec3(0.2f, 0.7f, 0.2f), "Game Modes");
+            drawButton(1, btnX, btn2Y, btnW, btnH, "INSTRUCTIONS", glm::vec3(0.3f, 0.5f, 0.8f), "How to Play");
+            drawButton(2, btnX, btn3Y, btnW, btnH, "OPTIONS", glm::vec3(0.7f, 0.5f, 0.2f), "Settings");
+            drawButton(3, btnX, btn4Y, btnW, btnH, "EXIT", glm::vec3(0.7f, 0.2f, 0.2f), "Quit Game");
+        } else if (state.currentMenuScreen == MenuScreen::PLAY_MODES) {
         // Play modes screen: one card per mode (aligned grid), each with title + description + PLAY button.
         // Hover should scale the ACTUAL card (no extra "invisible backplate" layer), and hovered card should draw last
         // so it can overlap the footer BACK button.
@@ -384,7 +390,7 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             "A curated set of stages with layouts, objectives, and difficulty ramps.",
             {"Hand-made stages and goals.", "Progression and challenge levels.", "Coming soon."},
             glm::vec3(0.20f, 0.75f, 0.85f), false, true);
-    } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
+        } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
         // Options submenu: SOUND (placeholder), GRAPHICS (placeholder), BACK
         drawButton(0, btnX, btn1Y - 50.0f, btnW, btnH, "SOUND", glm::vec3(0.3f, 0.6f, 0.7f), "Coming Soon");
         drawButton(1, btnX, btn2Y - 50.0f, btnW, btnH, "GRAPHICS", glm::vec3(0.6f, 0.3f, 0.7f), "Coming Soon");
@@ -395,7 +401,7 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         float backX = panelX + 20.0f * uiS;
         float backY = panelY + 15.0f * uiS;
         drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
-    } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
+        } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
         // Instructions screen: CONTROLS, POWERUPS, BACK (buttons open the detailed overlay panel)
         drawButton(0, btnX, btn1Y - 50.0f, btnW, btnH, "CONTROLS", glm::vec3(0.3f, 0.6f, 0.7f), "View");
         drawButton(1, btnX, btn2Y - 50.0f, btnW, btnH, "POWERUPS", glm::vec3(0.6f, 0.3f, 0.7f), "View");
@@ -406,10 +412,11 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         float backX = panelX + 20.0f * uiS;
         float backY = panelY + 15.0f * uiS;
         drawButton(2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+        }
     }
 
     // Small clickable "4" badge for the one-brick test mode (only on MAIN menu, bottom-right corner)
-    if (state.currentMenuScreen == MenuScreen::MAIN) {
+    if (!state.showInstructions && state.currentMenuScreen == MenuScreen::MAIN) {
         float badgeW = L.testBadge.w;
         float badgeH = L.testBadge.h;
         float badgeX = L.testBadge.x;
@@ -454,39 +461,49 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
 
     // Show instructions overlay if toggled
     if (state.showInstructions) {
-        // Instructions overlay (keep similar "menu panel" ratio; not fullscreen)
-        float instrW = std::min(980.0f, (float)ctx.fbW * 0.75f);
-        float instrH = std::min(690.0f, (float)ctx.fbH * 0.72f);
-        float instrX = ((float)ctx.fbW - instrW) * 0.5f;
-        float instrY = std::max(40.0f, ((float)ctx.fbH - instrH) * 0.5f - 60.0f);
+        const auto OL = game::ui::instructionsOverlayLayout(L, ctx.fbW, ctx.fbH, state.instructionsTab);
+        const float instrX = OL.panel.x;
+        const float instrY = OL.panel.y;
+        const float instrW = OL.panel.w;
+        const float instrH = OL.panel.h;
 
-        // Keep the overlay BELOW the big BREAKOUT title (match OverlayLayout.cpp spacing).
-        const float titlePanelGap = 26.0f;
-        float maxTopY = L.titleY - titlePanelGap; // y-up
-        if (instrY + instrH > maxTopY) {
-            instrY = maxTopY - instrH;
-            instrY = std::max(40.0f, instrY);
+        // Overlay fill:
+        // - Controls: solid panel for readability.
+        // - Powerups: 2-widget look — NO big background panel (model sits directly on background).
+        if (state.instructionsTab == 0) {
+            ctx.renderer.drawUIQuad(instrX, instrY, instrW, instrH, glm::vec4(0.05f, 0.05f, 0.1f, 0.98f));
         }
 
-        ctx.renderer.drawUIQuad(instrX, instrY, instrW, instrH, glm::vec4(0.05f, 0.05f, 0.1f, 0.98f));
-
-        // Instructions border — neon RGB (matching title style)
+        // Instructions border — keep for Controls, but for Powerups we avoid a big "panel box"
+        // so the left model area feels truly on the background.
         float borderThickness = 3.0f;
         float tRgbInstr = ctx.time.now();
         float hueRgbInstr = std::fmod(0.56f + 0.08f * std::sin(tRgbInstr * 1.2f), 1.0f);
         glm::vec3 neonRgbInstr = ui::hsv2rgb(hueRgbInstr, 0.85f, 1.0f);
         glm::vec4 instrBorder(neonRgbInstr, 1.0f);
-        ctx.renderer.drawUIQuad(instrX - borderThickness, instrY - borderThickness, instrW + 2*borderThickness, borderThickness, instrBorder);
-        ctx.renderer.drawUIQuad(instrX - borderThickness, instrY + instrH, instrW + 2*borderThickness, borderThickness, instrBorder);
-        ctx.renderer.drawUIQuad(instrX - borderThickness, instrY, borderThickness, instrH, instrBorder);
-        ctx.renderer.drawUIQuad(instrX + instrW, instrY, borderThickness, instrH, instrBorder);
+        if (state.instructionsTab == 0) {
+            ctx.renderer.drawUIQuad(instrX - borderThickness, instrY - borderThickness, instrW + 2*borderThickness, borderThickness, instrBorder);
+            ctx.renderer.drawUIQuad(instrX - borderThickness, instrY + instrH, instrW + 2*borderThickness, borderThickness, instrBorder);
+            ctx.renderer.drawUIQuad(instrX - borderThickness, instrY, borderThickness, instrH, instrBorder);
+            ctx.renderer.drawUIQuad(instrX + instrW, instrY, borderThickness, instrH, instrBorder);
+        }
 
         // Title with glow + underline (tab-aware)
         std::string instrTitle = (state.instructionsTab == 0) ? "CONTROLS" : "POWERUPS";
-        float instrTitleScale = 1.6f;
+        float instrTitleScale = 1.6f * uiS;
         float instrTitleW = ctx.renderer.measureUITextWidth(instrTitle, instrTitleScale);
         float instrTitleX = instrX + (instrW - instrTitleW) * 0.5f;
-        float instrTitleY = instrY + instrH - 42.0f;
+        // Powerups title should sit lower so it doesn't crowd the big "BREAKOUT 3D" header.
+        float titleTopPad = (state.instructionsTab == 1) ? (96.0f * uiS) : (42.0f * uiS);
+        float instrTitleY = instrY + instrH - titleTopPad;
+        // In Powerups (no panel fill), add a tiny backdrop behind the title only (keeps it readable).
+        if (state.instructionsTab == 1) {
+            float padX = 26.0f * uiS;
+            float padY = 12.0f * uiS;
+            float th = ctx.renderer.getUIFontLineHeight(instrTitleScale);
+            ctx.renderer.drawUIQuad(instrTitleX - padX, instrTitleY - padY, instrTitleW + 2.0f * padX, th + 2.0f * padY,
+                                   glm::vec4(0.05f, 0.05f, 0.1f, 0.40f));
+        }
         glm::vec3 glowCol(0.10f, 0.35f, 0.90f);
         for (float o = 2.5f; o >= 1.0f; o -= 0.5f) {
             float a = 0.16f / o;
@@ -498,10 +515,10 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         ctx.renderer.drawUIText(instrTitleX, instrTitleY, instrTitle, instrTitleScale, glm::vec3(0.2f, 0.85f, 1.0f));
         // Underline neon bar
         float barW = instrTitleW;
-        float barH = 4.0f;
+        float barH = 4.0f * uiS;
         float hueBar = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
         glm::vec3 neonBar = ui::hsv2rgb(hueBar, 0.85f, 1.0f);
-        ctx.renderer.drawUIQuad(instrTitleX, instrTitleY - 6.0f, barW, barH, glm::vec4(neonBar, 1.0f));
+        ctx.renderer.drawUIQuad(instrTitleX, instrTitleY - 6.0f * uiS, barW, barH, glm::vec4(neonBar, 1.0f));
 
         if (state.instructionsTab == 0) {
             // Controls list (single panel; no inner "card", no duplicate title, no tip)
@@ -537,91 +554,183 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         }
 
         if (state.instructionsTab == 1) {
-            float textY = instrY + instrH - 100.0f;
-            float textX = instrX + 24.0f;
-            float lineGap = 28.0f;
-            float sectionGap = 16.0f;
-
-            // Power-ups section
-            std::string puTitle = "Power-ups — Good";
-            ctx.renderer.drawUIText(textX, textY, puTitle, 0.85f, glm::vec3(0.35f, 1.0f, 0.35f));
-            ctx.renderer.drawUIQuad(textX, textY - 6.0f, 180.0f, 3.0f, glm::vec4(0.35f, 1.0f, 0.35f, 1.0f));
-            textY -= lineGap;
-
-            std::vector<std::string> goodPowerups = {
-                "Green (EXPAND): Makes paddle wider for 7 seconds",
-                "Blue (EXTRA BALL): Spawns 3 additional balls",
-                "Red (EXTRA LIFE): Adds +1 life",
-                "Orange (FIREBALL): Turn ball into one-shot fireball with AoE"
+            // --- POWERUP INSPECTOR (LET HIM COOK) ---
+            struct Entry {
+                const char* name;
+                const char* desc;
+                const engine::Mesh* mesh;
+                glm::vec3 tint;
+                float scale;
+                int videoIdx; // index into GameAssets::powerupVideoFrames
             };
 
-            for (const auto& line : goodPowerups) {
-                ctx.renderer.drawUIQuad(textX, textY + 4.0f, 8.0f, 8.0f, glm::vec4(0.35f, 1.0f, 0.35f, 1.0f));
-                ctx.renderer.drawUIText(textX + 14.0f, textY, line, 0.62f, glm::vec3(0.8f, 1.0f, 0.85f));
-                textY -= lineGap;
+            std::vector<Entry> entries = {
+                {"EXPAND",      "Makes the paddle wider for a short time.",              &assets.expand,    glm::vec3(0.35f, 1.0f, 0.35f), 1.05f, 0},
+                {"EXTRA BALL",  "Spawns 3 additional balls.",                             &assets.extraBall, glm::vec3(0.35f, 0.85f, 1.0f),  1.00f, 1},
+                {"EXTRA LIFE",  "Adds +1 life.",                                          &assets.extraLife, glm::vec3(1.0f, 0.25f, 0.25f),  1.05f, 2},
+                {"FIREBALL",    "Turns the ball into a one-shot fireball with AoE.",     &assets.fireball,  glm::vec3(1.0f, 0.55f, 0.10f),  1.05f, 3},
+                {"SLOW",        "Slows paddle movement for a short time.",               &assets.slow,      glm::vec3(0.75f, 0.55f, 0.20f), 1.05f, 4},
+                {"SHIELD",      "A barrier behind the paddle saves balls temporarily.",  &assets.shield,    glm::vec3(0.25f, 1.0f, 1.0f),  1.10f, 5},
+                // Curses (no SKULL powerup in the actual game; SKULL mesh is used as the REVERSE icon)
+                {"REVERSE",     "Inverts left/right controls temporarily.",              &assets.skull,     glm::vec3(1.0f, 0.20f, 0.90f), 1.05f, 6},
+                {"TINY",        "Shrinks the paddle for a short time.",                  &assets.minus,     glm::vec3(1.0f, 0.95f, 0.25f), 1.00f, 7},
+            };
+
+            int idx = state.powerupInspectIndex;
+            if (entries.empty()) idx = 0;
+            else {
+                if (idx < 0) idx = 0;
+                if (idx >= (int)entries.size()) idx = (int)entries.size() - 1;
+            }
+            const Entry& e = entries[idx];
+
+            // Left: model viewport
+            {
+                const auto& R = OL.modelRect;
+                // Model (slow spin + user rotation) — rendered "on the background" (no inner box),
+                // clipped to the left half so it feels like the PLAY screen card style.
+                float cx = R.x + R.w * 0.5f;
+                float cy = R.y + R.h * 0.60f;
+                // Make preview models much bigger so they occupy the left half.
+                float s = std::min(R.w, R.h) * 0.42f * e.scale;
+
+                float spin = ctx.time.now() * 0.35f;
+                float yaw = state.powerupInspectYaw + spin;
+                float pitch = state.powerupInspectPitch;
+
+                glm::mat4 M(1.0f);
+                M = glm::translate(M, glm::vec3(cx, cy, 0.0f));
+                M = glm::rotate(M, yaw, glm::vec3(0, 1, 0));
+                M = glm::rotate(M, pitch, glm::vec3(1, 0, 0));
+                M = glm::scale(M, glm::vec3(s, s, s));
+
+                // Match in-game "TINY looks like a plank": sculpt minus into a bar (see `WorldRender.cpp`).
+                if (std::string(e.name) == "TINY") {
+                    M = glm::scale(M, glm::vec3(2.35f, 0.22f, 0.60f));
+                }
+
+                // Important: UI pass disables depth test, which makes complex meshes look "inside-out".
+                // Enable depth + clip to the model rect just for this draw.
+                ctx.renderer.uiSetScissor(true, R.x, R.y, R.w, R.h);
+                ctx.renderer.uiSetDepthTest(true, true);
+                ctx.renderer.drawMesh(*e.mesh, M, e.tint);
+                ctx.renderer.uiSetDepthTest(false, false);
+                ctx.renderer.uiSetScissor(false);
             }
 
-            textY -= sectionGap;
+            // Right: info widget (name, description, video placeholder, arrows)
+            {
+                const auto& R = OL.infoRect;
+                // Keep this as the "second widget" (readable card).
+                ctx.renderer.drawUIQuad(R.x, R.y, R.w, R.h, glm::vec4(0.06f, 0.06f, 0.10f, 0.92f));
 
-            // Curses section
-            std::string cursTitle = "Power-ups — Bad";
-            ctx.renderer.drawUIText(textX, textY, cursTitle, 0.85f, glm::vec3(1.0f, 0.20f, 0.20f));
-            ctx.renderer.drawUIQuad(textX, textY - 6.0f, 180.0f, 3.0f, glm::vec4(1.0f, 0.20f, 0.20f, 1.0f));
-            textY -= lineGap;
+                // Header
+                float x = R.x + 16.0f * uiS;
+                float y = R.y + R.h - 58.0f * uiS;
+                float titleScale = 1.55f * uiS;
+                ctx.renderer.drawUIText(x, y, e.name, titleScale, glm::vec3(1.0f, 1.0f, 1.0f));
+                ctx.renderer.drawUIQuad(x, y - 10.0f * uiS, std::min(R.w - 28.0f * uiS, 340.0f * uiS), 3.0f * uiS, glm::vec4(e.tint, 1.0f));
 
-            std::vector<std::string> curses = {
-                "Brown (SLOW): Slows paddle movement for 7 seconds",
-                "Magenta (REVERSE): Inverts left/right controls for ~4s",
-                "Yellow (TINY): Shrinks paddle for 6 seconds",
-                "Cyan (SHIELD): Barrier behind paddle saves balls for 6.5s"
-            };
+                // Description (wrapped)
+                float descScale = 1.10f * uiS;
+                float descY = y - 62.0f * uiS;
+                ui::drawWrappedText(ctx.renderer, x, descY, R.w - 28.0f * uiS, e.desc, descScale, glm::vec4(0.86f, 0.94f, 1.0f, 0.92f), 6.0f * uiS);
 
-            for (const auto& line : curses) {
-                ctx.renderer.drawUIQuad(textX, textY + 4.0f, 8.0f, 8.0f, glm::vec4(1.0f, 0.35f, 0.35f, 1.0f));
-                ctx.renderer.drawUIText(textX + 14.0f, textY, line, 0.62f, glm::vec3(1.0f, 0.9f, 0.9f));
-                textY -= lineGap;
+                // Video placeholder
+                const auto& V = OL.videoRect;
+                // "Video" preview: if extracted frame textures exist, play them; otherwise show placeholder.
+                ctx.renderer.drawUIQuad(V.x, V.y, V.w, V.h, glm::vec4(0.02f, 0.02f, 0.04f, 0.90f));
+                float bt = 2.0f;
+                ctx.renderer.drawUIQuad(V.x - bt, V.y - bt, V.w + 2*bt, bt, glm::vec4(1,1,1,0.12f));
+                ctx.renderer.drawUIQuad(V.x - bt, V.y + V.h, V.w + 2*bt, bt, glm::vec4(1,1,1,0.12f));
+                ctx.renderer.drawUIQuad(V.x - bt, V.y, bt, V.h, glm::vec4(1,1,1,0.12f));
+                ctx.renderer.drawUIQuad(V.x + V.w, V.y, bt, V.h, glm::vec4(1,1,1,0.12f));
+
+                const auto& gif = assets.powerupVideo(e.videoIdx);
+                if (!gif.empty()) {
+                    const auto& fr = gif.frameAtTime(ctx.time.now());
+                    ctx.renderer.drawUIQuad(V.x, V.y, V.w, V.h, glm::vec4(1,1,1,1), fr.id);
+                } else {
+                    std::string ph = assets.powerupVideoPaths[e.videoIdx].empty()
+                        ? "VIDEO (gif not set)"
+                        : "VIDEO (loading...)";
+                    float phS = 0.72f * uiS;
+                    float phW = ctx.renderer.measureUITextWidth(ph, phS);
+                    float phH = ctx.renderer.getUIFontLineHeight(phS);
+                    ctx.renderer.drawUIText(V.x + (V.w - phW) * 0.5f, V.y + (V.h - phH) * 0.5f, ph, phS, glm::vec4(1,1,1,0.55f));
+                    std::string hint = "assets/video/*.gif";
+                    float hs = 0.55f * uiS;
+                    float hw = ctx.renderer.measureUITextWidth(hint, hs);
+                    ctx.renderer.drawUIText(V.x + (V.w - hw) * 0.5f, V.y + 16.0f * uiS, hint, hs, glm::vec4(1,1,1,0.45f));
+                }
+
+                // RGB border on the right widget (requested)
+                {
+                    float bt2 = 3.0f * uiS;
+                    float hue2 = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
+                    glm::vec3 neon2 = ui::hsv2rgb(hue2, 0.85f, 1.0f);
+                    glm::vec4 b2(neon2, 0.95f);
+                    ctx.renderer.drawUIQuad(R.x - bt2, R.y - bt2, R.w + 2*bt2, bt2, b2);
+                    ctx.renderer.drawUIQuad(R.x - bt2, R.y + R.h, R.w + 2*bt2, bt2, b2);
+                    ctx.renderer.drawUIQuad(R.x - bt2, R.y, bt2, R.h, b2);
+                    ctx.renderer.drawUIQuad(R.x + R.w, R.y, bt2, R.h, b2);
+                }
+
+                // Nav arrows
+                auto drawNav = [&](const game::ui::Rect& B, const std::string& label, bool hovered) {
+                    glm::vec3 base(0.10f, 0.10f, 0.16f);
+                    glm::vec3 col = base * (hovered ? 1.25f : 1.0f);
+                    float sh = hovered ? 6.0f : 3.0f;
+                    ctx.renderer.drawUIQuad(B.x + sh, B.y - sh, B.w, B.h, glm::vec4(0,0,0, hovered ? 0.55f : 0.45f));
+                    ctx.renderer.drawUIQuad(B.x, B.y, B.w, B.h, glm::vec4(col, 0.95f));
+                    float tS = 1.15f * uiS;
+                    float tw = ctx.renderer.measureUITextWidth(label, tS);
+                    float th = ctx.renderer.getUIFontLineHeight(tS);
+                    ctx.renderer.drawUIText(B.x + (B.w - tw) * 0.5f, B.y + (B.h - th) * 0.5f, label, tS, glm::vec4(1,1,1,1));
+                };
+
+                drawNav(OL.navLeft, "<", state.hoveredPowerupNav == 0);
+                drawNav(OL.navRight, ">", state.hoveredPowerupNav == 1);
+
+                // Index indicator
+                std::string ind = std::to_string(idx + 1) + " / " + std::to_string((int)entries.size());
+                float indS = 0.70f * uiS;
+                float indW = ctx.renderer.measureUITextWidth(ind, indS);
+                ctx.renderer.drawUIText(R.x + (R.w - indW) * 0.5f, OL.navLeft.y + 16.0f * uiS, ind, indS, glm::vec4(1,1,1,0.70f));
             }
         }
 
         // BACK button (bottom-left; replaces the old X)
         {
-            bool hovered = state.hoveredCloseButton;
-            float backW = 150.0f;
-            float backH = 56.0f;
-            float backX = instrX + 22.0f;
-            float backY = instrY + 16.0f;
+            // Match the PLAY_MODES back button style.
+            bool backHover = state.hoveredCloseButton;
+            float uiS = L.uiScale;
+            float bx = OL.backBtn.x, by = OL.backBtn.y, bw = OL.backBtn.w, bh = OL.backBtn.h;
 
-            float s = hovered ? 1.06f : 1.0f;
-            float cx = backX + backW * 0.5f;
-            float cy = backY + backH * 0.5f;
-            float w = backW * s;
-            float h = backH * s;
-            float x = cx - w * 0.5f;
-            float y = cy - h * 0.5f;
-
-            float sh = hovered ? 6.0f : 3.0f;
-            ctx.renderer.drawUIQuad(x + sh, y - sh, w, h, glm::vec4(0,0,0, hovered ? 0.60f : 0.50f));
+            float sh = (backHover ? 6.0f : 3.0f) * uiS;
+            ctx.renderer.drawUIQuad(bx + sh, by - sh, bw, bh, glm::vec4(0,0,0, backHover ? 0.55f : 0.45f));
             glm::vec3 base(0.10f, 0.10f, 0.16f);
-            glm::vec3 col = base * (hovered ? 1.25f : 1.0f);
-            ctx.renderer.drawUIQuad(x, y, w, h, glm::vec4(col, 0.95f));
+            glm::vec3 col = base * (backHover ? 1.25f : 1.0f);
+            ctx.renderer.drawUIQuad(bx, by, bw, bh, glm::vec4(col, 0.95f));
 
-            float bt = 2.5f;
+            // Neon border (subtle, matches menu vibe)
+            float bt = 2.5f * uiS;
             float hue = std::fmod(0.56f + 0.08f * std::sin(ctx.time.now() * 1.2f), 1.0f);
             glm::vec3 neon = ui::hsv2rgb(hue, 0.85f, 1.0f);
-            glm::vec4 bcol(neon, hovered ? 1.0f : 0.80f);
-            ctx.renderer.drawUIQuad(x - bt, y - bt, w + 2*bt, bt, bcol);
-            ctx.renderer.drawUIQuad(x - bt, y + h,  w + 2*bt, bt, bcol);
-            ctx.renderer.drawUIQuad(x - bt, y, bt, h, bcol);
-            ctx.renderer.drawUIQuad(x + w,  y, bt, h, bcol);
+            glm::vec4 bcol(neon, backHover ? 1.0f : 0.75f);
+            ctx.renderer.drawUIQuad(bx - bt, by - bt, bw + 2*bt, bt, bcol);
+            ctx.renderer.drawUIQuad(bx - bt, by + bh, bw + 2*bt, bt, bcol);
+            ctx.renderer.drawUIQuad(bx - bt, by, bt, bh, bcol);
+            ctx.renderer.drawUIQuad(bx + bw, by, bt, bh, bcol);
 
             std::string back = "< BACK";
-            float scale = 0.86f;
-            float tw = ctx.renderer.measureUITextWidth(back, scale);
-            float th = ctx.renderer.getUIFontLineHeight(scale);
-            float tx = x + (w - tw) * 0.5f - 6.0f;
-            float ty = y + (h - th) * 0.5f;
-            ctx.renderer.drawUIText(tx + 1.0f, ty - 1.0f, back, scale, glm::vec4(0,0,0,0.55f));
-            ctx.renderer.drawUIText(tx, ty, back, scale, glm::vec4(1,1,1,1));
+            float bs = (bh / 56.0f) * (0.78f * uiS);
+            float tw = ctx.renderer.measureUITextWidth(back, bs);
+            float th = ctx.renderer.getUIFontLineHeight(bs);
+            float tx = bx + (bw - tw) * 0.5f - 6.0f * uiS;
+            float ty = by + (bh - th) * 0.5f;
+            ctx.renderer.drawUIText(tx + 1.0f * uiS, ty - 1.0f * uiS, back, bs, glm::vec4(0,0,0,0.55f));
+            ctx.renderer.drawUIText(tx, ty, back, bs, glm::vec4(1,1,1,1));
         }
     }
 
