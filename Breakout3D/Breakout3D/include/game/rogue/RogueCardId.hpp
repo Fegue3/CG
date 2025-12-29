@@ -30,8 +30,7 @@ enum class RogueCardId : int {
     MOD_FIREBALL_WIDE_SLOW,        // +fireball radius mult, -paddle speed
 
     // --- More normal modifier cards (environment + creative trade-offs) ---
-    MOD_WIND_RIGHT,                // constant wind pushes balls right (+drops, -paddle speed)
-    MOD_WIND_LEFT,                 // constant wind pushes balls left (+drops, -paddle speed)
+    MOD_WIND_RANDOM,               // wind randomizes ball direction left/right (+drops, -paddle speed)
     MOD_CENTERED_ARENA,            // paddle movement clamped to center (+points, -drops)
     MOD_STICKY_PADDLE,             // balls stick on paddle hit (+control, -ball speed)
     MOD_SCORE_FARM,                // +brick points, -drop chance
