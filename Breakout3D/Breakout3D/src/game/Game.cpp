@@ -171,9 +171,27 @@ void Game::update(const engine::Input& input) {
 
         // Update hover state
         m_state.hoveredRogueCard = -1;
+        m_state.hoveredRogueCardPickButton = -1;
+        
         if (m_state.rogueOfferCount > 0 && L.cardA.contains(px, py)) m_state.hoveredRogueCard = 0;
         else if (m_state.rogueOfferCount > 1 && L.cardB.contains(px, py)) m_state.hoveredRogueCard = 1;
         else if (m_state.rogueOfferCount > 2 && L.cardC.contains(px, py)) m_state.hoveredRogueCard = 2;
+
+        // Check if hover is specifically over the PICK button
+        auto checkPickButtonHover = [&](const game::ui::Rect& cardRect, int cardIndex) {
+            float pbW = cardRect.w * 0.56f;
+            float pbH = 76.0f;
+            float pbX = cardRect.x + (cardRect.w - pbW) * 0.5f;
+            float pbY = cardRect.y + 26.0f;
+            game::ui::Rect pickBtn{pbX, pbY, pbW, pbH};
+            if (pickBtn.contains(px, py)) {
+                m_state.hoveredRogueCardPickButton = cardIndex;
+            }
+        };
+
+        if (m_state.hoveredRogueCard == 0) checkPickButtonHover(L.cardA, 0);
+        else if (m_state.hoveredRogueCard == 1) checkPickButtonHover(L.cardB, 1);
+        else if (m_state.hoveredRogueCard == 2) checkPickButtonHover(L.cardC, 2);
 
         if (click) {
             if (m_state.hoveredRogueCard >= 0 && m_state.hoveredRogueCard < m_state.rogueOfferCount) {
@@ -471,6 +489,7 @@ void Game::update(const engine::Input& input) {
                 game::rogue::dealOffer(m_state, 3, opPack, nextWave);
                 m_state.mode = GameMode::ROGUE_CARDS;
                 m_state.hoveredRogueCard = -1;
+                m_state.hoveredRogueCardPickButton = -1;
             }
             return;
         }
