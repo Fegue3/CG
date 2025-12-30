@@ -41,6 +41,26 @@ inline OverlayLayout pauseOverlay(int fbW, int fbH) {
     return L;
 }
 
+// Larger pause overlay for ROGUE mode (to fit card list)
+inline OverlayLayout pauseOverlayRogue(int fbW, int fbH) {
+    OverlayLayout L;
+    L.panel.w = 920.0f;  // Increased from 920
+    L.panel.h = 700.0f;
+    L.panel.x = (fbW - L.panel.w) * 0.5f;
+    L.panel.y = (fbH - L.panel.h) * 0.5f;
+
+    const float btnW = 140.0f;
+    const float btnH = 60.0f;
+    const float btnGap = 50.0f;
+    const float btnXLeft = L.panel.x + (L.panel.w - 2.0f * btnW - btnGap) * 0.5f;
+    const float btnXRight = btnXLeft + btnW + btnGap;
+    const float btnY = L.panel.y + 40.0f;
+
+    L.leftBtn = Rect{btnXLeft, btnY, btnW, btnH};
+    L.rightBtn = Rect{btnXRight, btnY, btnW, btnH};
+    return L;
+}
+
 // Must match visuals in `game/render/UIRender.cpp`.
 inline OverlayLayout endOverlay(int fbW, int fbH) {
     OverlayLayout L;
