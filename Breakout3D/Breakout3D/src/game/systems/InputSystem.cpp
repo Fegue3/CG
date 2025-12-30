@@ -347,6 +347,81 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
                 state.hoveredMenuButton = 2; // BACK
             }
         }
+    } else if (state.currentMenuScreen == MenuScreen::SOUND) {
+        // Sound settings: sliders + back
+        const auto SL = game::ui::soundSettingsLayout(state.menuLayout, fbW, fbH);
+
+        state.hoveredSoundBack = SL.backBtn.contains(px, py);
+        state.hoveredSoundSlider = -1;
+
+        auto hitSlider = [&](int idx, const game::ui::Rect& track, const game::ui::Rect& knob) {
+            // generous hitbox: track + knob height
+            game::ui::Rect hit{track.x, knob.y, track.w, knob.h};
+            if (hit.contains(px, py)) state.hoveredSoundSlider = idx;
+        };
+        hitSlider(0, SL.master.track, SL.master.knob);
+        hitSlider(1, SL.sfx.track, SL.sfx.knob);
+        hitSlider(2, SL.music.track, SL.music.knob);
+        hitSlider(3, SL.stinger.track, SL.stinger.knob);
+
+        // For consistent button hover rendering in drawButton(), reuse hoveredMenuButton index 2 as BACK.
+        if (state.hoveredSoundBack) state.hoveredMenuButton = 2;
+
+        // Dragging logic
+        bool down = input.mouseDown(engine::MouseButton::Left);
+        if (!down) {
+            state.draggingSound = false;
+            state.draggingSoundSlider = -1;
+        }
+
+        auto applySlider = [&](int idx, float norm) {
+            auto clamp01 = [](float v) { return std::max(0.0f, std::min(1.0f, v)); };
+            norm = clamp01(norm);
+
+            // Sliders are volume (0..1), not dB.
+            if (idx == 0) state.audioMasterVol = norm;
+            else if (idx == 1) state.audioSfxVol = norm;
+            else if (idx == 2) state.audioMusicVol = norm;
+            else if (idx == 3) state.audioStingerVol = norm;
+        };
+
+        if (click) {
+            if (state.hoveredSoundBack) {
+                state.currentMenuScreen = MenuScreen::OPTIONS;
+                state.hoveredSoundSlider = -1;
+                state.draggingSound = false;
+                state.draggingSoundSlider = -1;
+                return true;
+            }
+
+            if (state.hoveredSoundSlider != -1) {
+                state.draggingSound = true;
+                state.draggingSoundSlider = state.hoveredSoundSlider;
+                // Set immediately on click.
+                const game::ui::Rect* track = nullptr;
+                if (state.draggingSoundSlider == 0) track = &SL.master.track;
+                else if (state.draggingSoundSlider == 1) track = &SL.sfx.track;
+                else if (state.draggingSoundSlider == 2) track = &SL.music.track;
+                else if (state.draggingSoundSlider == 3) track = &SL.stinger.track;
+                if (track) {
+                    float norm = (px - track->x) / std::max(1.0f, track->w);
+                    applySlider(state.draggingSoundSlider, norm);
+                }
+                return true;
+            }
+        }
+
+        if (state.draggingSound && state.draggingSoundSlider != -1 && down) {
+            const game::ui::Rect* track = nullptr;
+            if (state.draggingSoundSlider == 0) track = &SL.master.track;
+            else if (state.draggingSoundSlider == 1) track = &SL.sfx.track;
+            else if (state.draggingSoundSlider == 2) track = &SL.music.track;
+            else if (state.draggingSoundSlider == 3) track = &SL.stinger.track;
+            if (track) {
+                float norm = (px - track->x) / std::max(1.0f, track->w);
+                applySlider(state.draggingSoundSlider, norm);
+            }
+        }
     } else if (state.currentMenuScreen == MenuScreen::INSTRUCTIONS) {
         float offsetY = -50.0f; // Instructions buttons start lower (matches OPTIONS layout)
         ui::Rect controlsBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
@@ -488,7 +563,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             float offsetY = -50.0f;
             ui::Rect soundBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
             if (soundBtn.contains(px, py)) {
-                // TODO: Implement sound settings
+                state.currentMenuScreen = MenuScreen::SOUND;
                 return true;
             }
             // GRAPHICS button (placeholder)

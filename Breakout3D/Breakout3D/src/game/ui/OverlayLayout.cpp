@@ -186,6 +186,55 @@ MenuLayout calculateMenuLayout(engine::Renderer& renderer, int fbW, int fbH) {
     return L;
 }
 
+SoundSettingsLayout soundSettingsLayout(const MenuLayout& menu, int fbW, int fbH) {
+    (void)fbW; (void)fbH;
+    SoundSettingsLayout L;
+    float s = menu.uiScale;
+
+    // Bigger panel than the default menu panel so sliders have breathing room.
+    float extraH = 140.0f * s;
+    float panelW = menu.panelW;
+    float panelH = menu.panelH + extraH;
+    float panelX = menu.panelX;
+    // Keep the Sound panel aligned with the standard menu panel (user request).
+    float panelY = menu.panelY - extraH * 0.5f;
+    // Clamp to screen (keep some margins).
+    panelY = std::max(24.0f, std::min(panelY, (float)fbH - 24.0f - panelH));
+    L.panel = Rect{panelX, panelY, panelW, panelH};
+
+    // Back button matches other sub-screens (top-left inside panel).
+    float backW = 120.0f * s;
+    float backH = 50.0f * s;
+    float backX = L.panel.x + 20.0f * s;
+    float backY = L.panel.y + 15.0f * s;
+    L.backBtn = Rect{backX, backY, backW, backH};
+
+    // Sliders
+    float trackW = L.panel.w * 0.74f;
+    float trackH = 14.0f * s;
+    float trackX = L.panel.x + (L.panel.w - trackW) * 0.5f;
+
+    // Place rows from top to bottom with enough spacing for labels and value text.
+    float topY = L.panel.y + L.panel.h - 170.0f * s;
+    float rowGap = 112.0f * s;
+
+    auto makeSlider = [&](int row) -> SoundSettingsLayout::Slider {
+        float y = topY - row * rowGap;
+        SoundSettingsLayout::Slider sl;
+        sl.track = Rect{trackX, y, trackW, trackH};
+        float knobW = 18.0f * s;
+        float knobH = 34.0f * s;
+        sl.knob = Rect{trackX, y - (knobH - trackH) * 0.5f, knobW, knobH};
+        return sl;
+    };
+
+    L.master  = makeSlider(0);
+    L.sfx     = makeSlider(1);
+    L.music   = makeSlider(2);
+    L.stinger = makeSlider(3);
+    return L;
+}
+
 } // namespace game::ui
 
 

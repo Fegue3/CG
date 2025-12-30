@@ -60,6 +60,7 @@ void drawButton(
 // Top-level screens (not overlays).
 void drawMainScreen(const MenuCtx& m);
 void drawOptionsScreen(const MenuCtx& m);
+void drawSoundScreen(const MenuCtx& m);
 void drawInstructionsScreen(const MenuCtx& m);
 void drawPlayModesScreen(const MenuCtx& m);
 void drawLevelSelectScreen(const MenuCtx& m);

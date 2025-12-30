@@ -26,11 +26,11 @@ public:
 
     void update(float dt);
 
-    // Mix controls (in dB; 0 dB = unchanged)
-    void setMasterDb(float db);
-    void setSfxDb(float db);
-    void setMusicDb(float db);
-    void setStingerDb(float db);
+    // Volume controls (linear multipliers, 0..1+)
+    void setMasterVolume(float v);
+    void setSfxVolume(float v);
+    void setMusicVolume(float v);
+    void setStingerVolume(float v);
 
     // One-shots (IDs are relative to category roots, without extension, and without _NN suffix)
     // Examples:
@@ -57,6 +57,9 @@ public:
 
 private:
     float dbToLinear(float db) const;
+    float musicBusGain() const;
+    float sfxBusGain() const;
+    float stingerBusGain() const;
     std::string normalizeSlashes(std::string p) const;
     static bool endsWith(const std::string& s, const std::string& suf);
 
@@ -85,6 +88,12 @@ private:
     float m_sfxDb = 0.0f;
     float m_musicDb = -14.0f;
     float m_stingerDb = -10.0f;
+
+    // User volume multipliers (set by UI sliders; keeps requested "volume" semantics).
+    float m_masterVol = 1.0f;
+    float m_sfxVol = 1.0f;
+    float m_musicVol = 1.0f;
+    float m_stingerVol = 1.0f;
 
     std::unordered_map<std::string, FileList> m_sfxGroups;
     std::unordered_map<std::string, FileList> m_musicGroups;

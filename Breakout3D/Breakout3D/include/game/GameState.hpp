@@ -31,7 +31,8 @@ enum class MenuScreen {
     PLAY_MODES, // Play modes submenu: Normal, Endless, Rogue, Levels, Back
     LEVEL_SELECT, // Level select screen for LEVELS mode
     INSTRUCTIONS, // Instructions screen: Controls, Powerups, Back
-    OPTIONS     // Options submenu: Sound, Graphics, Back
+    OPTIONS,    // Options submenu: Sound, Graphics, Back
+    SOUND       // Sound settings screen (sliders)
 };
 
 // PowerUpType is now defined in game/entities/PowerUp.hpp
@@ -212,6 +213,19 @@ struct GameState {
     float rogueCardsScrollModifiers = 0.0f; // px
     float rogueCardsScrollOp = 0.0f;        // px
     bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
+
+    // --- Audio settings (volume sliders, linear 0..1) ---
+    float audioMasterVol = 1.0f;
+    float audioSfxVol = 1.0f;
+    // Defaults tuned for a "feels right" mix: music present but below SFX, stingers a bit above music.
+    float audioMusicVol = 0.32f;
+    float audioStingerVol = 0.40f;
+
+    // Sound menu interactions
+    int hoveredSoundSlider = -1;     // -1 none, 0 master, 1 sfx, 2 music, 3 stinger
+    bool hoveredSoundBack = false;
+    int draggingSoundSlider = -1;    // -1 none, else slider index
+    bool draggingSound = false;
 
     // Cached menu layout (computed using real font metrics to keep input + render aligned).
     ui::MenuLayout menuLayout;

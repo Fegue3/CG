@@ -38,6 +38,9 @@ struct AudioSystem::Impl {
     float musicFadeDur = 0.0f;
     float musicStartA = 0.0f;
     float musicStartB = 0.0f;
+    // Normalized weights relative to the music bus gain (so volume sliders can go to 0 and back reliably).
+    float musicWeightA = 0.0f;
+    float musicWeightB = 0.0f;
 
     // Looping SFX (small map of persistent ma_sound)
     struct LoopSfx {
@@ -48,6 +51,8 @@ struct AudioSystem::Impl {
         float start = 0.0f;
         float t = 0.0f;
         float dur = 0.0f;
+        // Normalized fade alpha relative to sfx bus gain (0..1).
+        float fadeAlpha = 0.0f;
     };
     std::unordered_map<std::string, LoopSfx> loops;
 
@@ -57,6 +62,11 @@ struct AudioSystem::Impl {
         bool valid = false;
     };
     std::vector<Voice> voices;
+
+    // Last computed bus gains (linear), used to rescale active sounds when the user changes sliders.
+    float lastMusicGain = 1.0f;
+    float lastSfxGain = 1.0f;
+    float lastStingerGain = 1.0f;
 };
 
 static fs::path executableDir() {
@@ -136,6 +146,10 @@ std::string AudioSystem::normalizeSlashes(std::string p) const {
 float AudioSystem::dbToLinear(float db) const {
     return std::pow(10.0f, db / 20.0f);
 }
+
+float AudioSystem::musicBusGain() const { return dbToLinear(m_masterDb + m_musicDb) * (m_masterVol * m_musicVol); }
+float AudioSystem::sfxBusGain() const { return dbToLinear(m_masterDb + m_sfxDb) * (m_masterVol * m_sfxVol); }
+float AudioSystem::stingerBusGain() const { return dbToLinear(m_masterDb + m_stingerDb) * (m_masterVol * m_stingerVol); }
 
 const AudioSystem::FileList* AudioSystem::findGroup(
     const std::unordered_map<std::string, FileList>& groups,
@@ -313,6 +327,13 @@ bool AudioSystem::init(const std::string& audioRoot) {
     }
 
     m_enabled = true;
+
+    // Seed last gains so the first update has a stable baseline.
+    m_impl->lastMusicGain = musicBusGain();
+    m_impl->lastSfxGain = sfxBusGain();
+    m_impl->lastStingerGain = stingerBusGain();
+    m_impl->musicWeightA = 0.0f;
+    m_impl->musicWeightB = 0.0f;
     return true;
 }
 
@@ -350,10 +371,12 @@ void AudioSystem::shutdown() {
     m_impl = nullptr;
 }
 
-void AudioSystem::setMasterDb(float db)  { m_masterDb = db; }
-void AudioSystem::setSfxDb(float db)     { m_sfxDb = db; }
-void AudioSystem::setMusicDb(float db)   { m_musicDb = db; }
-void AudioSystem::setStingerDb(float db) { m_stingerDb = db; }
+static float clamp01(float v) { return std::max(0.0f, std::min(1.0f, v)); }
+
+void AudioSystem::setMasterVolume(float v)  { m_masterVol = clamp01(v); }
+void AudioSystem::setSfxVolume(float v)     { m_sfxVol = clamp01(v); }
+void AudioSystem::setMusicVolume(float v)   { m_musicVol = clamp01(v); }
+void AudioSystem::setStingerVolume(float v) { m_stingerVol = clamp01(v); }
 
 void AudioSystem::playOneShotFile(const std::string& filePath, float linearGain) {
     if (!m_enabled || !m_impl) return;
@@ -388,7 +411,7 @@ void AudioSystem::playSfx(const std::string& id, float db) {
     const std::string* file = chooseRandomFile(*grp);
     if (!file) return;
 
-    float gain = dbToLinear(m_masterDb + m_sfxDb + db);
+    float gain = dbToLinear(m_masterDb + m_sfxDb + db) * (m_masterVol * m_sfxVol);
     playOneShotFile(*file, gain);
 }
 
@@ -399,7 +422,7 @@ void AudioSystem::playStinger(const std::string& id, float db) {
     const std::string* file = chooseRandomFile(*grp);
     if (!file) return;
 
-    float gain = dbToLinear(m_masterDb + m_stingerDb + db);
+    float gain = dbToLinear(m_masterDb + m_stingerDb + db) * (m_masterVol * m_stingerVol);
     playOneShotFile(*file, gain);
 }
 
@@ -407,7 +430,7 @@ void AudioSystem::startOrSwapLoopMusic(const std::string& filePath, float fadeSe
     if (!m_enabled || !m_impl) return;
 
     // Decide target gain
-    m_impl->musicTarget = dbToLinear(m_masterDb + m_musicDb);
+    m_impl->musicTarget = musicBusGain();
     m_impl->musicFadeT = 0.0f;
     m_impl->musicFadeDur = std::max(0.0f, fadeSeconds);
 
@@ -441,6 +464,11 @@ void AudioSystem::startOrSwapLoopMusic(const std::string& filePath, float fadeSe
     // If no old track, snap up instantly.
     if (!oldValid || m_impl->musicFadeDur <= 1e-4f) {
         ma_sound_set_volume(newS, m_impl->musicTarget);
+        // Update weights so slider rescaling works.
+        if (m_impl->musicTarget > 1e-8f) {
+            m_impl->musicWeightA = m_impl->musicAValid ? (ma_sound_get_volume(&m_impl->musicA) / m_impl->musicTarget) : 0.0f;
+            m_impl->musicWeightB = m_impl->musicBValid ? (ma_sound_get_volume(&m_impl->musicB) / m_impl->musicTarget) : 0.0f;
+        }
         if (oldValid) {
             ma_sound_set_volume(oldS, 0.0f);
             ma_sound_stop(oldS);
@@ -518,7 +546,7 @@ void AudioSystem::ensureLoopSfx(const std::string& id, const std::string& filePa
         ma_sound_start(&L.sound);
     }
 
-    float target = enabled ? dbToLinear(m_masterDb + m_sfxDb) : 0.0f;
+    float target = enabled ? sfxBusGain() : 0.0f;
     L.targetEnabled = enabled;
     L.start = ma_sound_get_volume(&L.sound);
     L.target = target;
@@ -581,8 +609,78 @@ void AudioSystem::setSfxLoopEnabled(const std::string& id, bool enabled, float f
 
 void AudioSystem::update(float dt) {
     if (!m_enabled) return;
+
+    // Live volume updates: if sliders change, rescale active sounds and update targets.
+    if (m_impl) {
+        float newMusic = musicBusGain();
+        float newSfx = sfxBusGain();
+        float newSt = stingerBusGain();
+
+        // === MUSIC ===
+        // Update weights from current volumes when we have a stable non-zero baseline.
+        if (m_impl->lastMusicGain > 1e-8f) {
+            if (m_impl->musicAValid) m_impl->musicWeightA = ma_sound_get_volume(&m_impl->musicA) / m_impl->lastMusicGain;
+            if (m_impl->musicBValid) m_impl->musicWeightB = ma_sound_get_volume(&m_impl->musicB) / m_impl->lastMusicGain;
+        }
+
+        // Update music target (used by fade code).
+        m_impl->musicTarget = newMusic;
+
+        // Apply new bus gain absolutely using weights (works even when last gain == 0).
+        if (m_impl->musicAValid) ma_sound_set_volume(&m_impl->musicA, m_impl->musicWeightA * newMusic);
+        if (m_impl->musicBValid) ma_sound_set_volume(&m_impl->musicB, m_impl->musicWeightB * newMusic);
+
+        // === LOOP SFX ===
+        // Update fade alpha for each loop relative to last bus gain when possible.
+        if (m_impl->lastSfxGain > 1e-8f) {
+            for (auto& [_, L] : m_impl->loops) {
+                if (!L.valid) continue;
+                // For loops we keep a single alpha (0..1) that represents how "enabled" it currently is.
+                float cur = ma_sound_get_volume(&L.sound);
+                L.fadeAlpha = std::clamp(cur / m_impl->lastSfxGain, 0.0f, 1.0f);
+            }
+        }
+
+        // Rescale loops or update their fade targets.
+        for (auto& [_, L] : m_impl->loops) {
+            if (!L.valid) continue;
+            // Keep fade position but change bus gain.
+            float v = L.fadeAlpha * newSfx;
+            ma_sound_set_volume(&L.sound, v);
+            if (L.targetEnabled) {
+                // If it's fading towards "on", update the target to the new bus gain.
+                L.target = newSfx;
+            }
+        }
+
+        // Stingers are one-shots; can’t be rescaled after start, but store for future.
+        (void)newSt;
+
+        m_impl->lastMusicGain = newMusic;
+        m_impl->lastSfxGain = newSfx;
+        m_impl->lastStingerGain = newSt;
+    }
+
     updateMusicFade(dt);
     updateLoopSfxFade(dt);
+
+    // After fade updates, refresh weights/alfa using the *current* bus gains (if non-zero),
+    // so the next volume change keeps the right proportions.
+    if (m_impl) {
+        float mg = m_impl->lastMusicGain;
+        if (mg > 1e-8f) {
+            if (m_impl->musicAValid) m_impl->musicWeightA = ma_sound_get_volume(&m_impl->musicA) / mg;
+            if (m_impl->musicBValid) m_impl->musicWeightB = ma_sound_get_volume(&m_impl->musicB) / mg;
+        }
+        float sg = m_impl->lastSfxGain;
+        if (sg > 1e-8f) {
+            for (auto& [_, L] : m_impl->loops) {
+                if (!L.valid) continue;
+                float cur = ma_sound_get_volume(&L.sound);
+                L.fadeAlpha = std::clamp(cur / sg, 0.0f, 1.0f);
+            }
+        }
+    }
 }
 
 } // namespace game

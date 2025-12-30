@@ -29,6 +29,9 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
             case MenuScreen::OPTIONS:
                 game::render::menu::drawOptionsScreen(m);
                 break;
+            case MenuScreen::SOUND:
+                game::render::menu::drawSoundScreen(m);
+                break;
             case MenuScreen::INSTRUCTIONS:
                 game::render::menu::drawInstructionsScreen(m);
                 break;

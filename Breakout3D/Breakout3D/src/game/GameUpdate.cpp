@@ -61,6 +61,14 @@ void Game::update(const engine::Input& input) {
     // Tick audio (fades, loop gates). Audio may be disabled (init failure), that's OK.
     m_audio.update(dt);
 
+    // Live-apply audio settings from the menu sliders.
+    if (m_audio.isEnabled()) {
+        m_audio.setMasterVolume(m_state.audioMasterVol);
+        m_audio.setSfxVolume(m_state.audioSfxVol);
+        m_audio.setMusicVolume(m_state.audioMusicVol);
+        m_audio.setStingerVolume(m_state.audioStingerVol);
+    }
+
     auto setMusic = [&](const std::string& group, float fadeSeconds) {
         if (group == m_currentMusicGroup) return;
         m_currentMusicGroup = group;

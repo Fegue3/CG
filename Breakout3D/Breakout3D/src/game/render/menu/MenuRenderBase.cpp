@@ -119,9 +119,22 @@ void drawMainPanelIfNeeded(const MenuCtx& m) {
     if (m.state.currentMenuScreen == MenuScreen::PLAY_MODES) return;
     if (m.state.currentMenuScreen == MenuScreen::LEVEL_SELECT) return;
 
+    // SOUND screen uses a custom (taller) panel layout.
+    float panelX = m.panelX;
+    float panelY = m.panelY;
+    float panelW = m.panelW;
+    float panelH = m.panelH;
+    if (m.state.currentMenuScreen == MenuScreen::SOUND) {
+        const auto SL = game::ui::soundSettingsLayout(m.L, m.ctx.fbW, m.ctx.fbH);
+        panelX = SL.panel.x;
+        panelY = SL.panel.y;
+        panelW = SL.panel.w;
+        panelH = SL.panel.h;
+    }
+
     float shadowOffset = 6.0f * m.uiS;
-    m.ctx.renderer.drawUIQuad(m.panelX + shadowOffset, m.panelY - shadowOffset, m.panelW, m.panelH, glm::vec4(0.0f, 0.0f, 0.0f, 0.5f));
-    m.ctx.renderer.drawUIQuad(m.panelX, m.panelY, m.panelW, m.panelH, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
+    m.ctx.renderer.drawUIQuad(panelX + shadowOffset, panelY - shadowOffset, panelW, panelH, glm::vec4(0.0f, 0.0f, 0.0f, 0.5f));
+    m.ctx.renderer.drawUIQuad(panelX, panelY, panelW, panelH, glm::vec4(0.08f, 0.08f, 0.14f, 0.98f));
 
     // Animated border with neon RGB (matching title style)
     float borderThickness = 3.0f * m.uiS;
@@ -129,10 +142,10 @@ void drawMainPanelIfNeeded(const MenuCtx& m) {
     float hueRgb = std::fmod(0.56f + 0.08f * std::sin(tRgb * 1.2f), 1.0f);
     glm::vec3 neonRgb = ui::hsv2rgb(hueRgb, 0.85f, 1.0f);
     glm::vec4 borderColor(neonRgb, 1.0f);
-    m.ctx.renderer.drawUIQuad(m.panelX - borderThickness, m.panelY - borderThickness, m.panelW + 2*borderThickness, borderThickness, borderColor);
-    m.ctx.renderer.drawUIQuad(m.panelX - borderThickness, m.panelY + m.panelH, m.panelW + 2*borderThickness, borderThickness, borderColor);
-    m.ctx.renderer.drawUIQuad(m.panelX - borderThickness, m.panelY, borderThickness, m.panelH, borderColor);
-    m.ctx.renderer.drawUIQuad(m.panelX + m.panelW, m.panelY, borderThickness, m.panelH, borderColor);
+    m.ctx.renderer.drawUIQuad(panelX - borderThickness, panelY - borderThickness, panelW + 2*borderThickness, borderThickness, borderColor);
+    m.ctx.renderer.drawUIQuad(panelX - borderThickness, panelY + panelH, panelW + 2*borderThickness, borderThickness, borderColor);
+    m.ctx.renderer.drawUIQuad(panelX - borderThickness, panelY, borderThickness, panelH, borderColor);
+    m.ctx.renderer.drawUIQuad(panelX + panelW, panelY, borderThickness, panelH, borderColor);
 }
 
 void drawButton(

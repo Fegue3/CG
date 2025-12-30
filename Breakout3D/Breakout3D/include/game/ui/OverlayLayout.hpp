@@ -114,6 +114,24 @@ struct MenuLayout {
     Rect backBtn;
 };
 
+struct SoundSettingsLayout {
+    Rect panel;
+    Rect backBtn;
+
+    struct Slider {
+        Rect track;
+        Rect knob;
+    };
+
+    Slider master;
+    Slider sfx;
+    Slider music;
+    Slider stinger;
+};
+
+// Layout for the Sound settings screen (sliders), derived from the cached MenuLayout.
+SoundSettingsLayout soundSettingsLayout(const MenuLayout& menu, int fbW, int fbH);
+
 // Must match visuals in `game/render/UIRender.cpp`.
 // NOTE: implemented in `src/game/ui/OverlayLayout.cpp` to avoid pulling the full Renderer into headers.
 MenuLayout calculateMenuLayout(engine::Renderer& renderer, int fbW, int fbH);
