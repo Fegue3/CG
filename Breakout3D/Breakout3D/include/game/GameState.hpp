@@ -47,6 +47,7 @@ struct GameState {
     int levelsBestLevel = 1; // highest level reached (persistent)
     int levelsCompletedStars[20] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 0-3 stars per level
     int hoveredLevelButton = -1; // -1 = none, 0-19 = level index
+    int hoveredPauseRogueCard = -1; // -1 = none, else index into rogueChosen (for pause menu hover)
     
     // Endless mode: persistent best score (loaded on init, updated/saved during play)
     int endlessBestScore = 0;
