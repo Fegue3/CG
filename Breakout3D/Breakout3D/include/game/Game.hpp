@@ -5,6 +5,8 @@
 #include "engine/Input.hpp"
 #include "game/GameConfig.hpp"
 #include "game/GameState.hpp"
+#include "game/AudioSystem.hpp"
+#include <string>
 
 // forward declare (não precisa incluir o header aqui)
 namespace game { struct GameAssets; }
@@ -27,6 +29,36 @@ private:
 
     GameConfig m_cfg;
     GameState m_state;
+
+    AudioSystem m_audio;
+
+    // Previous-frame tracking for one-shot audio events
+    GameMode m_prevMode = GameMode::MENU;
+    GameType m_prevGameType = GameType::NORMAL;
+    MenuScreen m_prevMenuScreen = MenuScreen::MAIN;
+    int m_prevHoveredMenuButton = -1;
+    int m_prevHoveredPlayModeButton = -1;
+    bool m_prevShowInstructions = false;
+    int m_prevInstructionsTab = 0;
+    int m_prevHoveredCloseButton = 0;
+    int m_prevHoveredPowerupNav = -1;
+
+    int m_prevHoveredRogueCard = -1;
+    int m_prevHoveredRoguePickBtn = -1;
+
+    int m_prevLives = 3;
+    int m_prevWave = 1;
+    int m_prevEndlessRowsSpawned = 0;
+    bool m_prevEndlessDangerActive = false;
+    bool m_prevStreakBanking = false;
+    int m_prevStreakPoints = 0;
+
+    int m_endlessMusicTier = 0; // 0 low, 1 mid, 2 high
+    std::string m_currentMusicGroup;
+
+    // Instructions overlay extra UX SFX
+    int m_prevPowerupInspectIndex = 0;
+    bool m_prevRogueCardsInspectOpen = false;
 };
 
 } // namespace game
