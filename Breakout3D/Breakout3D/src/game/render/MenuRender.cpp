@@ -460,7 +460,6 @@ void renderMenu(const RenderContext& ctx, const GameState& state, const GameAsse
         float gapX = 25.0f * uiS;
         float gapY = 25.0f * uiS;
         float gridW = cols * btnSize + (cols - 1) * gapX;
-        float gridH = rows * btnSize + (rows - 1) * gapY;
         float startX = levelPanelX + (levelPanelW - gridW) * 0.5f;
         float startY = levelPanelY + 80.0f * uiS;
         

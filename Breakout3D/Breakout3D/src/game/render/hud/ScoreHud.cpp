@@ -123,7 +123,7 @@ void drawScoreAndWaveHud(const RenderContext& ctx, const GameState& state) {
     }
     if (state.gameType == GameType::LEVELS) {
         // LEVELS mode: show current level number
-        std::string levelStr = "LEVEL " + std::to_string(state.currentLevel) + " / 10";
+        std::string levelStr = "LEVEL " + std::to_string(state.currentLevel) + " / 20";
         float levelScale = 1.60f;
         float levelH = ctx.renderer.getUIFontLineHeight(levelScale);
         float levelW = ctx.renderer.measureUITextWidth(levelStr, levelScale);

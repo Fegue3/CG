@@ -433,7 +433,7 @@ void Game::update(const engine::Input& input) {
         // Level completed! Unlock next level if needed
         if (m_state.currentLevel >= m_state.levelsBestLevel) {
             m_state.levelsBestLevel = m_state.currentLevel + 1;
-            if (m_state.levelsBestLevel > 10) m_state.levelsBestLevel = 10;
+            if (m_state.levelsBestLevel > 20) m_state.levelsBestLevel = 20;
         }
         
         // Trigger finisher cinematic (delays WIN overlay)

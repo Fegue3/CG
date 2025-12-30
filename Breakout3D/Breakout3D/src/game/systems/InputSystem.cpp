@@ -8,12 +8,94 @@
 #include "game/rogue/RogueCards.hpp"
 #include "engine/Window.hpp"
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 
 namespace game {
 
 bool InputSystem::pointInRectPx(float px, float py, float x, float y, float w, float h) {
     return (px >= x && px <= x + w && py >= y && py <= y + h);
+}
+
+static glm::vec3 computeLaunchDirFromMouse(
+    const GameState& state,
+    const engine::Input& input,
+    const GameConfig& cfg,
+    engine::Window& window,
+    const Ball& ball
+) {
+    auto [fbW, fbH] = window.getFramebufferSize();
+    fbW = std::max(1, fbW);
+    fbH = std::max(1, fbH);
+
+    // Mirror the camera setup used in Game::render() (so aiming matches what the player sees).
+    float arenaW = (cfg.arenaMaxX - cfg.arenaMinX);
+    float arenaD = (cfg.arenaMaxZ - cfg.arenaMinZ);
+    float base   = std::max(arenaW, arenaD);
+    float zMid   = (cfg.arenaMinZ + cfg.arenaMaxZ) * 0.5f;
+
+    glm::vec3 camPos, camTarget;
+    float fovDeg = 45.0f;
+    if (state.cameraMode == 1) {
+        camPos    = glm::vec3(0.0f, base * 1.03f, zMid + 0.5f);
+        camTarget = glm::vec3(0.0f, 0.0f, zMid);
+    } else {
+        camPos    = glm::vec3(0.0f, base * 0.62f, base * 0.82f);
+        camTarget = glm::vec3(0.0f, 0.0f, 0.8f);
+    }
+
+    glm::mat4 V = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
+    glm::mat4 P = glm::perspective(glm::radians(fovDeg), (float)fbW / (float)fbH, 0.1f, 300.0f);
+    glm::mat4 invPV = glm::inverse(P * V);
+
+    auto [mx, myRaw] = input.mousePosFbPx(); // myRaw: origin at top-left (GLFW-style)
+    float xNdc = (mx / (float)fbW) * 2.0f - 1.0f;
+    float yNdc = 1.0f - (myRaw / (float)fbH) * 2.0f;
+
+    auto unproject = [&](float zNdc) -> glm::vec3 {
+        glm::vec4 p = invPV * glm::vec4(xNdc, yNdc, zNdc, 1.0f);
+        if (std::abs(p.w) > 1e-6f) p /= p.w;
+        return glm::vec3(p);
+    };
+
+    glm::vec3 farPt = unproject(1.0f);
+    glm::vec3 rayDir = farPt - camPos;
+    float len2 = glm::dot(rayDir, rayDir);
+    if (len2 < 1e-10f) {
+        return glm::vec3(0.0f, 0.0f, -1.0f);
+    }
+    rayDir = glm::normalize(rayDir);
+
+    // Intersect the mouse ray with the gameplay plane (XZ plane at the ball's height).
+    float denom = rayDir.y;
+    if (std::abs(denom) < 1e-6f) {
+        return glm::vec3(0.0f, 0.0f, -1.0f);
+    }
+
+    float t = (ball.pos.y - camPos.y) / denom;
+    if (!(t > 0.0f)) {
+        return glm::vec3(0.0f, 0.0f, -1.0f);
+    }
+
+    glm::vec3 hit = camPos + rayDir * t;
+
+    // Direction in the game plane.
+    glm::vec3 dir(hit.x - ball.pos.x, 0.0f, hit.z - ball.pos.z);
+    float d2 = glm::dot(dir, dir);
+    if (d2 < 1e-10f) {
+        dir = glm::vec3(0.0f, 0.0f, -1.0f);
+    } else {
+        // Ensure the ball always goes toward the bricks (negative Z).
+        if (dir.z > -1e-6f) dir.z = -std::abs(dir.z) - 0.25f;
+
+        // Clamp horizontal angle to avoid near-horizontal shots.
+        float zabs = std::max(1e-4f, std::abs(dir.z));
+        float horizontalRatio = dir.x / zabs;
+        horizontalRatio = std::clamp(horizontalRatio, -0.8f, 0.8f);
+        dir.x = horizontalRatio * zabs;
+    }
+
+    return glm::normalize(dir);
 }
 
 bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, engine::Window& window) {
@@ -26,9 +108,11 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     const ui::MenuLayout& menu = state.menuLayout;
 
     // Secret: Press L to unlock all levels
+#ifdef BREAKOUT3D_DEBUG
     if (input.keyPressed(engine::Key::L)) {
         state.levelsBestLevel = 20;
     }
+#endif
 
     // If instructions overlay is shown, handle BACK + (Powerups tab) inspector interactions.
     if (state.showInstructions) {
@@ -299,7 +383,6 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
         float gapX = 25.0f * s;
         float gapY = 25.0f * s;
         float gridW = cols * btnSize + (cols - 1) * gapX;
-        float gridH = rows * btnSize + (rows - 1) * gapY;
         float startX = levelPanelX + (levelPanelW - gridW) * 0.5f;
         float startY = levelPanelY + 80.0f * s;
         
@@ -441,7 +524,6 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             float gapX = 25.0f * s;
             float gapY = 25.0f * s;
             float gridW = cols * btnSize + (cols - 1) * gapX;
-            float gridH = rows * btnSize + (rows - 1) * gapY;
             float startX = levelPanelX + (levelPanelW - gridW) * 0.5f;
             float startY = levelPanelY + 80.0f * s;
             
@@ -579,31 +661,9 @@ void InputSystem::handleGameInput(GameState& state, const engine::Input& input, 
         }
         if (ball.attached && input.keyDown(engine::Key::Space)) {
             ball.attached = false;
-            
-            // Calculate launch direction based on mouse position
-            auto [fbW, fbH] = window.getFramebufferSize();
-            auto [mx_px, my_px_raw] = input.mousePosFbPx();
-            
-            // Convert mouse position from screen space to world space (XZ plane)
-            // Assume arena is roughly centered and map screen to arena bounds
-            float mouseX = cfg.arenaMinX + (mx_px / (float)fbW) * (cfg.arenaMaxX - cfg.arenaMinX);
-            float mouseZ = cfg.arenaMinZ + ((float)fbH - my_px_raw) / (float)fbH * (cfg.arenaMaxZ - cfg.arenaMinZ);
-            
-            // Calculate direction from ball position to mouse position
-            glm::vec3 targetPos(mouseX, ball.pos.y, mouseZ);
-            glm::vec3 direction = targetPos - ball.pos;
-            
-            // Ensure the ball always goes upward (negative Z in game coordinates)
-            if (direction.z > 0.0f) {
-                direction.z = -direction.z;
-            }
-            
-            // Clamp horizontal angle to avoid too extreme angles
-            float horizontalRatio = direction.x / std::abs(direction.z);
-            horizontalRatio = std::clamp(horizontalRatio, -0.8f, 0.8f);
-            direction.x = horizontalRatio * std::abs(direction.z);
-            
-            glm::vec3 d = glm::normalize(direction);
+
+            // Accurate aim: unproject mouse through the current camera and intersect with the arena plane.
+            glm::vec3 d = computeLaunchDirFromMouse(state, input, cfg, window, ball);
             float sp = cfg.ballSpeed;
             if (state.gameType == GameType::ROGUE) sp *= game::rogue::ballSpeedMult(state);
             ball.vel = d * sp;
