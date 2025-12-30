@@ -189,7 +189,10 @@ void drawPauseOrEndOverlay(const RenderContext& ctx, const GameState& state) {
     }
 
     if (state.mode == GameMode::PAUSED) {
-        const auto L = game::ui::pauseOverlay(ctx.fbW, ctx.fbH);
+        // Use larger panel for ROGUE mode to fit all cards
+        const auto L = (state.gameType == GameType::ROGUE && !state.rogueChosen.empty()) 
+            ? game::ui::pauseOverlayRogue(ctx.fbW, ctx.fbH)
+            : game::ui::pauseOverlay(ctx.fbW, ctx.fbH);
         float panelW2 = L.panel.w;
         float panelH2 = L.panel.h;
         float panelX2 = L.panel.x;
@@ -250,6 +253,168 @@ void drawPauseOrEndOverlay(const RenderContext& ctx, const GameState& state) {
             float hueP = std::fmod(0.56f + (float)i / (float)std::max(1, nP-1) * 0.35f + 0.08f * std::sin(tP * 1.2f + i * 0.3f), 1.0f);
             glm::vec3 colP = ui::hsv2rgb(hueP, 0.85f, 1.0f);
             ctx.renderer.drawUIText(cxP, ty, chP, scale, colP);
+        }
+
+        // Show Rogue cards in PAUSED overlay (only in ROGUE mode)
+        if (state.gameType == GameType::ROGUE && !state.rogueChosen.empty()) {
+            // Title for cards section
+            std::string cardsTitle = "YOUR CARDS";
+            float titleScale = 1.45f;
+            float titleW = ctx.renderer.measureUITextWidth(cardsTitle, titleScale);
+            float titleH = ctx.renderer.getUIFontLineHeight(titleScale);
+            float titleX = panelX2 + (panelW2 - titleW) * 0.5f;
+            float titleY = panelY2 + panelH2 - titleH - 165.0f;
+            
+            // Title glow
+            glm::vec3 glowCards(0.10f, 0.65f, 1.00f);
+            for (float o = 2.0f; o >= 1.0f; o -= 0.5f) {
+                float a = 0.15f / o;
+                ctx.renderer.drawUIText(titleX - o, titleY, cardsTitle, titleScale, glowCards * a);
+                ctx.renderer.drawUIText(titleX + o, titleY, cardsTitle, titleScale, glowCards * a);
+                ctx.renderer.drawUIText(titleX, titleY - o, cardsTitle, titleScale, glowCards * a);
+                ctx.renderer.drawUIText(titleX, titleY + o, cardsTitle, titleScale, glowCards * a);
+            }
+            ctx.renderer.drawUIText(titleX, titleY, cardsTitle, titleScale, glm::vec3(1, 1, 1));
+
+            // Badge grid for cards (max 20 cards: 10 columns x 2 rows)
+            float badgeStartY = titleY - 80.0f;  // More space below title
+            float badgeBaseW = 50.0f;
+            float badgeBaseH = 50.0f;
+            float badgeGap = 10.0f;  // 10px spacing between columns
+            float badgeRowGap = 80.0f;  // Increased spacing between rows (for name labels)
+            float badgesPerRow = 10;  // 10 columns for 2 rows layout
+            
+            // Calculate starting X to center the grid
+            float totalWidth = badgesPerRow * badgeBaseW + (badgesPerRow - 1) * badgeGap;
+            float badgeStartX = panelX2 + (panelW2 - totalWidth) * 0.5f;
+            
+            int rowIdx = 0;
+            int colIdx = 0;
+            int cardCount = 0;
+            
+            for (size_t i = 0; i < state.rogueChosen.size() && cardCount < 20; ++i) {
+                game::rogue::RogueCardId cid = state.rogueChosen[i];
+                const auto& def = game::rogue::cardDef(cid);
+                glm::vec3 accent = game::rogue::cardAccent(cid);
+                bool isHovered = (state.hoveredPauseRogueCard == (int)i);
+                
+                // Get card abbreviation
+                std::string abbrev = game::rogue::cardAbbrev(cid);
+                if (abbrev.empty()) {
+                    std::string fullName(def.name);
+                    abbrev = fullName.substr(0, 3);
+                }
+                
+                // Badge position and size (stays fixed, doesn't move on hover)
+                float badgeX = badgeStartX + colIdx * (badgeBaseW + badgeGap);
+                float badgeY = badgeStartY - rowIdx * badgeRowGap;  // Use badgeRowGap for more spacing
+                float badgeW = badgeBaseW;
+                float badgeH = badgeBaseH;
+                
+                // Draw badge background with shadow
+                ctx.renderer.drawUIQuad(badgeX + 3.0f, badgeY - 3.0f, badgeW, badgeH, 
+                                      glm::vec4(0, 0, 0, 0.5f));
+                
+                // Badge body (darker version of accent color)
+                glm::vec3 badgeCol = accent * 0.7f;
+                ctx.renderer.drawUIQuad(badgeX, badgeY, badgeW, badgeH, glm::vec4(badgeCol, 0.95f));
+                
+                // Badge border (bright accent color, thicker if hovered)
+                float borderT = isHovered ? 3.5f : 2.0f;
+                glm::vec4 borderCol = glm::vec4(accent, 1.0f);
+                ctx.renderer.drawUIQuad(badgeX - borderT, badgeY - borderT, badgeW + 2*borderT, borderT, borderCol);
+                ctx.renderer.drawUIQuad(badgeX - borderT, badgeY + badgeH, badgeW + 2*borderT, borderT, borderCol);
+                ctx.renderer.drawUIQuad(badgeX - borderT, badgeY, borderT, badgeH, borderCol);
+                ctx.renderer.drawUIQuad(badgeX + badgeW, badgeY, borderT, badgeH, borderCol);
+                
+                // Badge text (abbreviation - same size always)
+                float textScale = 1.2f;
+                float textW = ctx.renderer.measureUITextWidth(abbrev, textScale);
+                float textH = ctx.renderer.getUIFontLineHeight(textScale);
+                float textX = badgeX + (badgeW - textW) * 0.5f;
+                float textY = badgeY + (badgeH - textH) * 0.5f;
+                
+                // Text shadow
+                ctx.renderer.drawUIText(textX + 1.0f, textY - 1.0f, abbrev, textScale, glm::vec4(0, 0, 0, 0.5f));
+                // Text main
+                ctx.renderer.drawUIText(textX, textY, abbrev, textScale, glm::vec3(1, 1, 1));
+                
+                // Label below badge (card name) - only show on hover
+                if (isHovered) {
+                    float labelScale = 0.85f;
+                    float labelW = ctx.renderer.measureUITextWidth(def.name, labelScale);
+                    float labelH = ctx.renderer.getUIFontLineHeight(labelScale);
+                    float labelX = badgeX + (badgeW - labelW) * 0.5f;
+                    float labelY = badgeY - labelH - 4.0f;
+                    
+                    // Label shadow
+                    ctx.renderer.drawUIText(labelX + 0.5f, labelY - 0.5f, def.name, labelScale, glm::vec4(0, 0, 0, 0.5f));
+                    // Label text
+                    ctx.renderer.drawUIText(labelX, labelY, def.name, labelScale, accent);
+                }
+                
+                // Move to next column/row
+                colIdx++;
+                if (colIdx >= (int)badgesPerRow) {
+                    colIdx = 0;
+                    rowIdx++;
+                }
+                cardCount++;
+            }
+            
+            // Show description tooltip for hovered card
+            if (state.hoveredPauseRogueCard >= 0 && state.hoveredPauseRogueCard < (int)state.rogueChosen.size()) {
+                game::rogue::RogueCardId hoveredId = state.rogueChosen[state.hoveredPauseRogueCard];
+                const auto& hoveredDef = game::rogue::cardDef(hoveredId);
+                glm::vec3 hoveredAccent = game::rogue::cardAccent(hoveredId);
+                
+                // Larger tooltip box at bottom (can take more space)
+                float tooltipW = 500.0f;
+                float tooltipH = 180.0f;
+                float tooltipX = panelX2 + (panelW2 - tooltipW) * 0.5f;
+                float tooltipY = panelY2 + 120.0f;  // Moved up from 80.0f to give more space
+                
+                // Tooltip background with shadow
+                ctx.renderer.drawUIQuad(tooltipX + 4.0f, tooltipY - 4.0f, tooltipW, tooltipH, 
+                                      glm::vec4(0, 0, 0, 0.5f));
+                ctx.renderer.drawUIQuad(tooltipX, tooltipY, tooltipW, tooltipH, 
+                                      glm::vec4(0.08f, 0.08f, 0.14f, 0.95f));
+                
+                // Tooltip border
+                float borderT = 2.5f;
+                ctx.renderer.drawUIQuad(tooltipX - borderT, tooltipY - borderT, tooltipW + 2*borderT, borderT, 
+                                      glm::vec4(hoveredAccent, 1.0f));
+                ctx.renderer.drawUIQuad(tooltipX - borderT, tooltipY + tooltipH, tooltipW + 2*borderT, borderT, 
+                                      glm::vec4(hoveredAccent, 1.0f));
+                ctx.renderer.drawUIQuad(tooltipX - borderT, tooltipY, borderT, tooltipH, 
+                                      glm::vec4(hoveredAccent, 1.0f));
+                ctx.renderer.drawUIQuad(tooltipX + tooltipW, tooltipY, borderT, tooltipH, 
+                                      glm::vec4(hoveredAccent, 1.0f));
+                
+                // Card name in tooltip
+                float nameScale = 1.35f;
+                float nameW = ctx.renderer.measureUITextWidth(hoveredDef.name, nameScale);
+                float nameH = ctx.renderer.getUIFontLineHeight(nameScale);
+                float nameX = tooltipX + (tooltipW - nameW) * 0.5f;
+                float nameY = tooltipY + tooltipH - nameH - 12.0f;
+                
+                // Name with glow
+                for (float o = 1.5f; o >= 0.5f; o -= 0.5f) {
+                    float a = 0.15f / o;
+                    ctx.renderer.drawUIText(nameX - o, nameY, hoveredDef.name, nameScale, hoveredAccent * a);
+                    ctx.renderer.drawUIText(nameX + o, nameY, hoveredDef.name, nameScale, hoveredAccent * a);
+                }
+                ctx.renderer.drawUIText(nameX, nameY, hoveredDef.name, nameScale, glm::vec3(1, 1, 1));
+                
+                // Description text (wrapped)
+                std::string desc = hoveredDef.shortDesc;
+                float descScale = 0.95f;
+                float descX = tooltipX + 20.0f;
+                float descY = nameY - 20.0f;
+                float descMaxW = tooltipW - 40.0f;
+                ui::drawWrappedText(ctx.renderer, descX, descY, descMaxW, desc, descScale, 
+                                  glm::vec4(0.90f, 0.93f, 1.0f, 0.95f), 10.0f);
+            }
         }
 
         // Buttons (Restart and Menu)
