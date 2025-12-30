@@ -332,10 +332,8 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
     } else if (state.currentMenuScreen == MenuScreen::OPTIONS) {
         float offsetY = -50.0f; // Options buttons start lower
         ui::Rect soundBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
-        ui::Rect graphicsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
         
         if (soundBtn.contains(px, py)) state.hoveredMenuButton = 0;    // SOUND
-        else if (graphicsBtn.contains(px, py)) state.hoveredMenuButton = 1; // GRAPHICS
         // BACK button
         else {
             float s = menu.uiScale;
@@ -344,7 +342,7 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             float backX = menu.panelX + 20.0f * s;
             float backY = menu.panelY + 15.0f * s;
             if (pointInRectPx(px, py, backX, backY, backW, backH)) {
-                state.hoveredMenuButton = 2; // BACK
+                state.hoveredMenuButton = 1; // BACK
             }
         }
     } else if (state.currentMenuScreen == MenuScreen::SOUND) {
@@ -564,12 +562,6 @@ bool InputSystem::handleMenuInput(GameState& state, const engine::Input& input, 
             ui::Rect soundBtn = {menu.btn1.x, menu.btn1.y + offsetY, menu.btn1.w, menu.btn1.h};
             if (soundBtn.contains(px, py)) {
                 state.currentMenuScreen = MenuScreen::SOUND;
-                return true;
-            }
-            // GRAPHICS button (placeholder)
-            ui::Rect graphicsBtn = {menu.btn2.x, menu.btn2.y + offsetY, menu.btn2.w, menu.btn2.h};
-            if (graphicsBtn.contains(px, py)) {
-                // TODO: Implement graphics settings
                 return true;
             }
             // BACK button

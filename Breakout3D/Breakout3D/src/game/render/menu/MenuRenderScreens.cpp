@@ -13,15 +13,14 @@ void drawMainScreen(const MenuCtx& m) {
 }
 
 void drawOptionsScreen(const MenuCtx& m) {
-    // Options submenu: SOUND, GRAPHICS, BACK
+    // Options submenu: SOUND, BACK
     drawButton(m, 0, m.btnX, m.btn1Y - 50.0f, m.btnW, m.btnH, "SOUND", glm::vec3(0.3f, 0.6f, 0.7f), "Mix");
-    drawButton(m, 1, m.btnX, m.btn2Y - 50.0f, m.btnW, m.btnH, "GRAPHICS", glm::vec3(0.6f, 0.3f, 0.7f), "");
 
     float backW = 120.0f * m.uiS;
     float backH = 50.0f * m.uiS;
     float backX = m.panelX + 20.0f * m.uiS;
     float backY = m.panelY + 15.0f * m.uiS;
-    drawButton(m, 2, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
+    drawButton(m, 1, backX, backY, backW, backH, "< BACK", glm::vec3(0.5f, 0.5f, 0.5f), "");
 }
 
 void drawInstructionsScreen(const MenuCtx& m) {
