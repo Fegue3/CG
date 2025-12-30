@@ -109,7 +109,7 @@ Each level in `LevelLayouts.hpp` enforces minimum HP:
    - Levels 16-20: Only hp=3,4 bricks (no single or double-hit visible)
 
 4. **Secret Feature**:
-   - Press "L" in main menu to unlock all 20 levels for testing
+   - Press "L" in main menu to unlock all 20 levels for testing (**debug build only**: `make debug`)
 
 ## Previous Implementation Notes
 

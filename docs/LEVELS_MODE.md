@@ -19,7 +19,7 @@ Complete all 20 levels by destroying every brick in each level. Progress through
 - Your paddle, ball, and lives carry over between levels
 - Active powerups are cleared when transitioning to the next level
 - Level progress is tracked (best level reached)
-- Secret: Press **L** to unlock all levels (debug feature)
+- Debug: Press **L** to unlock all levels (**debug build only**: `make debug`)
 
 ### Level Layouts
 
@@ -73,10 +73,10 @@ This displays your current level number out of 20 total levels.
 
 ## Features
 
-### Mouse-Directed Launch
-- When launching the ball, aim with your mouse cursor
-- The ball will launch toward the direction of your mouse pointer
-- Allows strategic positioning for optimal brick destruction
+### Mouse-Directed Launch (aim)
+- When launching the ball (Space), aim with your mouse cursor
+- The ball launches toward the direction of your mouse pointer
+- This affects both the normal ball and the one-shot fireball projectile
 
 ### Win Condition
 - Complete all 20 levels to trigger the WIN screen
@@ -89,11 +89,11 @@ This displays your current level number out of 20 total levels.
 ## Controls
 
 All standard Breakout controls apply:
-- **Mouse**: Move paddle (X-axis) + aim ball launch direction
-- **Left Click**: Launch ball (aims toward mouse)
-- **P**: Pause
-- **ESC**: Return to menu
-- **L**: Unlock all levels (debug feature, test only)
+- **A / D** (or **Left / Right Arrow**): move paddle
+- **Mouse**: aim launch direction
+- **Space**: launch ball (aims toward mouse)
+- **Esc**: pause / resume
+- **L**: unlock all levels (**debug build only**: `make debug`)
 
 ## Technical Details
 

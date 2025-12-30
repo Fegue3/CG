@@ -59,7 +59,7 @@ There is a small clickable badge inside the **EXIT** button:
 - Click the little **“4”** badge labeled “ONE BRICK”
   - Starts a tiny Normal-mode test level with a minimal brick setup (useful for quick checks).
 
-Implementation reference: `game/systems/InputSystem.cpp` (menu hit-testing) and `game/render/UIRender.cpp` (menu rendering).
+Implementation reference: `game/systems/InputSystem.cpp` (menu hit-testing) and `game/render/MenuRender.cpp` (menu rendering).
 
 ---
 
@@ -92,7 +92,7 @@ There is a small set of boxes in the top-right HUD:
 - **Mouse Left Click** on a box changes the background
   - Includes a “none” option (shown as `/`).
 
-Implementation reference: `game/systems/InputSystem.cpp` (BG selector input) and `game/render/UIRender.cpp` (BG selector UI).
+Implementation reference: `game/systems/InputSystem.cpp` (BG selector input) and `game/render/hud/BgSelectorHud.cpp` (BG selector UI).
 
 ---
 
@@ -108,7 +108,7 @@ These are clickable buttons drawn as part of the UI overlay, and they work via m
 Important implementation detail:
 
 - Layout is centralized in `game/ui/OverlayLayout.hpp` and used by both:
-  - `game/render/UIRender.cpp` (drawing)
+  - `game/render/MenuRender.cpp` (drawing)
   - `game/Game.cpp` (click hit-testing)
 
 ---
@@ -206,8 +206,14 @@ These binds are compiled only when `BREAKOUT3D_DEBUG` is defined (the `make debu
 
 In `PLAYING` mode:
 
+- **L**
+  - **Levels only**: unlock all levels (sets max unlocked to 20)
+
 - **3** (`K3`)
   - **Endless only**: forces a manual incremental brick row spawn (for testing pressure/lose-condition).
+
+- **R**
+  - **Rogue only**: fill/unlock Rogue cards up to the max (20)
 
 - **Power-up spawner (top-row keys, NOT numpad)**
   - Spawns the chosen power-up near the brick/top side so it **drops like a normal power-up**.
