@@ -15,10 +15,12 @@ CXXFLAGS := -std=c++17 -Wall -I$(INC_DIR) -I. -MMD -MP
 SYSTEM_UNAME := $(shell uname -s)
 
 ifeq ($(SYSTEM_UNAME),Linux)
-	LDLIBS := -lm -lGLU -lGL -lGLEW -lglfw
+	# Audio: miniaudio can dynamically load ALSA/Pulse at runtime; only dl/pthread are needed for linking.
+	LDLIBS := -lm -ldl -pthread -lGLU -lGL -lGLEW -lglfw
 endif
 ifeq ($(SYSTEM_UNAME),Darwin)
-	LDLIBS := -lm -framework OpenGL -L/opt/local/lib/ -lGLEW -lglfw
+	# Audio: miniaudio uses CoreAudio on macOS.
+	LDLIBS := -lm -framework OpenGL -framework CoreAudio -framework AudioToolbox -framework AudioUnit -L/opt/local/lib/ -lGLEW -lglfw
 endif
 
 # --------- sources (recursive) ----------
