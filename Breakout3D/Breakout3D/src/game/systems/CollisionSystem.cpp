@@ -28,24 +28,29 @@ static bool sphereAabbXZ(const glm::vec3& c, float r, const glm::vec3& bpos, con
 
 namespace game {
 
-void CollisionSystem::handleWorldCollisions(Ball& ball, const GameConfig& cfg) {
+bool CollisionSystem::handleWorldCollisions(Ball& ball, const GameConfig& cfg) {
+    bool hit = false;
     // Left/right walls
     if (ball.pos.x - cfg.ballRadius < cfg.arenaMinX) {
         ball.pos.x = cfg.arenaMinX + cfg.ballRadius;
         ball.vel.x = std::abs(ball.vel.x);
+        hit = true;
     }
     if (ball.pos.x + cfg.ballRadius > cfg.arenaMaxX) {
         ball.pos.x = cfg.arenaMaxX - cfg.ballRadius;
         ball.vel.x = -std::abs(ball.vel.x);
+        hit = true;
     }
     // Top wall (front wall in game terms)
     if (ball.pos.z - cfg.ballRadius < cfg.arenaMinZ) {
         ball.pos.z = cfg.arenaMinZ + cfg.ballRadius;
         ball.vel.z = std::abs(ball.vel.z);
+        hit = true;
     }
+    return hit;
 }
 
-void CollisionSystem::handlePaddleCollision(Ball& ball, const GameState& state, const glm::vec3& paddlePos,
+bool CollisionSystem::handlePaddleCollision(Ball& ball, const GameState& state, const glm::vec3& paddlePos,
                                             const glm::vec3& paddleSize, const GameConfig& cfg) {
     float halfZ = paddleSize.z * 0.5f;
     float paddleHalfX = paddleSize.x * 0.5f;
@@ -85,7 +90,7 @@ void CollisionSystem::handlePaddleCollision(Ball& ball, const GameState& state, 
                 ball.attached = true;
                 ball.vel = glm::vec3(0.0f);
                 ball.pos.z = minZ - cfg.ballRadius - 0.002f;
-                return;
+                return true;
             }
 
             float t = (ball.pos.x - paddlePos.x) / std::max(0.001f, paddleHalfX);
@@ -96,18 +101,25 @@ void CollisionSystem::handlePaddleCollision(Ball& ball, const GameState& state, 
 
             ball.pos.z = (frontSide ? (minZ - cfg.ballRadius - 0.002f) : (maxZ + cfg.ballRadius + 0.002f));
         }
+        return true;
     }
+    return false;
 }
 
-bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const GameConfig& cfg) {
+CollisionSystem::BrickCollisionInfo CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const GameConfig& cfg) {
+    BrickCollisionInfo info;
     if (state.brickHitCooldown > 0.0f) {
-        return false;
+        return info;
     }
 
     for (auto& br : state.bricks) {
         if (!br.alive) continue;
         if (sphereAabbXZ(ball.pos, cfg.ballRadius, br.pos, br.size)) {
+            info.hit = true;
             const bool fireballActive = ball.isFireball;
+            info.fireball = fireballActive;
+            info.hpBefore = br.hp;
+            info.maxHp = br.maxHp;
 
             // Scoring helper
             auto brickPoints = [&](int hp) -> int {
@@ -169,6 +181,7 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
             auto killBrick = [&](Brick& b, bool allowPowerupDrop) -> int {
                 if (!b.alive) return 0;
                 b.alive = false;
+                info.bricksKilled += 1;
 
                 // Track where the last destroyed brick was (for anchoring VFX).
                 state.lastBrickDestroyedValid = true;
@@ -265,7 +278,9 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 ball.vel = glm::vec3(0.0f);
                 state.pendingRespawnAfterFireball = true;
                 state.brickHitCooldown = 0.045f;
-                return true;
+                info.broke = (info.bricksKilled > 0);
+                info.hpAfter = 0;
+                return info;
             } else {
                 // Normal hit: damage 1
                 int dmg = 1;
@@ -291,6 +306,12 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                         }
                     }
                     (void)killBrick(br, true);
+                    info.broke = true;
+                }
+                info.hpAfter = std::max(0, br.hp);
+                if (!info.broke) {
+                    info.damaged = true;
+                    if (info.hpBefore > 1 && info.hpAfter == 1) info.cracked = true;
                 }
             }
 
@@ -308,10 +329,10 @@ bool CollisionSystem::handleBrickCollisions(Ball& ball, GameState& state, const 
                 ball.pos.z = br.pos.z + sign * (br.size.z * 0.5f + cfg.ballRadius + 0.002f);
             }
             state.brickHitCooldown = 0.045f;
-            return true;
+            return info;
         }
     }
-    return false;
+    return info;
 }
 
 } // namespace game
