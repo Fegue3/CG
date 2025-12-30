@@ -58,6 +58,28 @@ static void maybeUpdateEndlessBest(GameState& state) {
 void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
+    // Tick audio (fades, loop gates). Audio may be disabled (init failure), that's OK.
+    m_audio.update(dt);
+
+    auto setMusic = [&](const std::string& group, float fadeSeconds) {
+        if (group == m_currentMusicGroup) return;
+        m_currentMusicGroup = group;
+        m_audio.playMusic(group, fadeSeconds);
+    };
+
+    // Snapshot for diff-based audio triggers (we keep this lightweight; most events are inferred from state changes)
+    GameMode modeBefore = m_state.mode;
+    GameType typeBefore = m_state.gameType;
+    int livesBefore = m_state.lives;
+    int waveBefore = m_state.wave;
+    int endlessRowsBefore = m_state.endlessRowsSpawned;
+    bool dangerBefore = m_state.endlessDangerActive;
+    int streakBefore = m_state.endlessStreakPoints;
+    bool hadPowerupBefore = !m_state.powerups.empty();
+
+    int attachedBefore = 0;
+    for (const auto& b : m_state.balls) if (b.attached) attachedBefore++;
+
     // Preload powerup GIF previews asynchronously while the game is running,
     // so opening the Powerups inspector never stalls.
     m_assets.startPowerupVideoPreload();
@@ -137,7 +159,63 @@ void Game::update(const engine::Input& input) {
                 init();
             }
         }
-        return;
+
+        // --- Menu audio director ---
+        if (m_prevMode != GameMode::MENU) {
+            setMusic("music_menu_loop", 0.25f);
+            // Safety: kill gameplay loops while in menu.
+            m_audio.setSfxLoopEnabled("endless/endless_warning_loop", false, 0.12f);
+        }
+
+        if (m_state.currentMenuScreen != m_prevMenuScreen) {
+            m_audio.playSfx("ui/ui_select");
+        }
+        if (m_state.showInstructions != m_prevShowInstructions) {
+            m_audio.playSfx(m_state.showInstructions ? "ui/ui_confirm" : "ui/ui_back");
+        }
+        if (m_state.showInstructions && m_state.instructionsTab != m_prevInstructionsTab) {
+            m_audio.playSfx("ui/ui_toggle", -2.0f);
+        }
+
+        // More instruction UX SFX: powerup inspector arrows and rogue card modal open/close.
+        if (m_state.showInstructions) {
+            if (m_state.instructionsTab == 1 && m_state.powerupInspectIndex != m_prevPowerupInspectIndex) {
+                m_audio.playSfx("ui/ui_level_scroll", -2.5f);
+            }
+            if (m_state.instructionsTab == 2 && m_state.rogueCardsInspectOpen != m_prevRogueCardsInspectOpen) {
+                m_audio.playSfx(m_state.rogueCardsInspectOpen ? "ui/ui_card_flip" : "ui/ui_card_cancel", -2.0f);
+            }
+        }
+
+        bool hoverChanged =
+            (m_state.hoveredMenuButton != m_prevHoveredMenuButton) ||
+            (m_state.hoveredPlayModeButton != m_prevHoveredPlayModeButton) ||
+            (m_state.hoveredCloseButton != (m_prevHoveredCloseButton != 0)) ||
+            (m_state.hoveredPowerupNav != m_prevHoveredPowerupNav);
+        if (hoverChanged) {
+            if (m_state.hoveredMenuButton != -1 || m_prevHoveredMenuButton != -1 ||
+                m_state.hoveredPlayModeButton != -1 || m_prevHoveredPlayModeButton != -1 ||
+                m_state.hoveredCloseButton || (m_prevHoveredCloseButton != 0) ||
+                m_state.hoveredPowerupNav != -1 || m_prevHoveredPowerupNav != -1) {
+                m_audio.playSfx("ui/ui_move", -6.0f);
+            }
+        }
+
+        // Update prev trackers before menu early-return
+        m_prevMode = m_state.mode;
+        m_prevGameType = m_state.gameType;
+        m_prevMenuScreen = m_state.currentMenuScreen;
+        m_prevHoveredMenuButton = m_state.hoveredMenuButton;
+        m_prevHoveredPlayModeButton = m_state.hoveredPlayModeButton;
+        m_prevShowInstructions = m_state.showInstructions;
+        m_prevInstructionsTab = m_state.instructionsTab;
+        m_prevHoveredCloseButton = m_state.hoveredCloseButton ? 1 : 0;
+        m_prevHoveredPowerupNav = m_state.hoveredPowerupNav;
+        m_prevPowerupInspectIndex = m_state.powerupInspectIndex;
+        m_prevRogueCardsInspectOpen = m_state.rogueCardsInspectOpen;
+
+        // IMPORTANT: if we just left MENU (e.g. clicked PLAY), don't early-return.
+        if (m_state.mode == GameMode::MENU) return;
     }
 
     // Normal mode: when the last brick is destroyed, we play a short "camera break" finisher
@@ -176,12 +254,32 @@ void Game::update(const engine::Input& input) {
             m_state.winFinisherRealTimer = 0.0f;
             m_state.winFinisherHoldBrickValid = false;
             m_state.mode = GameMode::WIN;
+            // Immediate results music (the finisher path returns early, so we must trigger here).
+            setMusic("music_results_loop", 0.25f);
+            m_audio.playStinger("stinger_level_clear", +2.5f);
         }
         return;
     }
 
     // Handle game input (pause, paddle movement, ball launch, etc.)
     InputSystem::handleGameInput(m_state, input, m_cfg, m_window, dt);
+
+    // Pause toggle audio + music
+    if (modeBefore != m_state.mode) {
+        if (m_state.mode == GameMode::PAUSED) {
+            m_audio.playSfx("ui/ui_pause_in");
+            setMusic("music_pause_loop", 0.18f);
+        } else if (modeBefore == GameMode::PAUSED && m_state.mode == GameMode::PLAYING) {
+            m_audio.playSfx("ui/ui_pause_out");
+        }
+    }
+
+    // Ball launch sound (attached -> free)
+    int attachedAfter = 0;
+    for (const auto& b : m_state.balls) if (b.attached) attachedAfter++;
+    if (attachedAfter < attachedBefore) {
+        m_audio.playSfx("game/ball_launch", -1.5f);
+    }
 
     // ROGUE: card pick UI logic (pause gameplay, click to choose).
     if (m_state.mode == GameMode::ROGUE_CARDS) {
@@ -218,6 +316,9 @@ void Game::update(const engine::Input& input) {
 
         if (click) {
             if (m_state.hoveredRogueCard >= 0 && m_state.hoveredRogueCard < m_state.rogueOfferCount) {
+                // Card pick SFX + musical stinger
+                m_audio.playSfx("rogue/rogue_card_pick", -2.0f);
+                m_audio.playStinger("stinger_card_pick", +2.0f);
                 game::rogue::applyPickedCard(m_state, m_cfg, m_state.rogueOffer[m_state.hoveredRogueCard]);
                 // If we exited the card overlay (i.e., draft is done), start row spawn cadence.
                 if (m_state.mode == GameMode::PLAYING) {
@@ -226,6 +327,23 @@ void Game::update(const engine::Input& input) {
                 return;
             }
         }
+
+        // Hover sounds (no spam)
+        if (m_state.hoveredRogueCard != m_prevHoveredRogueCard ||
+            m_state.hoveredRogueCardPickButton != m_prevHoveredRoguePickBtn) {
+            if (m_state.hoveredRogueCard >= 0 || m_state.hoveredRogueCardPickButton >= 0) {
+                m_audio.playSfx("rogue/rogue_card_hover", -7.5f);
+            }
+        }
+
+        // Update prev trackers (early return)
+        m_prevMode = m_state.mode;
+        m_prevGameType = m_state.gameType;
+        m_prevHoveredRogueCard = m_state.hoveredRogueCard;
+        m_prevHoveredRoguePickBtn = m_state.hoveredRogueCardPickButton;
+
+        // Avoid long-running loops while in overlay UI.
+        m_audio.setSfxLoopEnabled("endless/endless_warning_loop", false, 0.12f);
         return;
     }
 
@@ -298,17 +416,26 @@ void Game::update(const engine::Input& input) {
         if (click) {
             // Left button: Restart
             if (L.leftBtn.contains(px, py)) {
+                m_audio.playSfx("ui/ui_confirm");
                 init();
                 return;
             }
             // Right button: Back to Menu
             if (L.rightBtn.contains(px, py)) {
+                m_audio.playSfx("ui/ui_back");
                 m_state.mode = GameMode::MENU;
                 m_state.currentMenuScreen = MenuScreen::MAIN;
                 m_state.showInstructions = false;
                 return;
             }
         }
+
+        // Update prev trackers (early return)
+        m_prevMode = m_state.mode;
+        m_prevGameType = m_state.gameType;
+
+        // Avoid long-running loops while paused.
+        m_audio.setSfxLoopEnabled("endless/endless_warning_loop", false, 0.12f);
         return;
     }
 
@@ -445,6 +572,19 @@ void Game::update(const engine::Input& input) {
 
         const auto L = game::ui::endOverlay(fbW, fbH);
 
+        // Entry music/stingers
+        if (m_prevMode != m_state.mode) {
+            setMusic("music_results_loop", 0.25f);
+            if (m_state.mode == GameMode::GAME_OVER) {
+                // SFX stinger + musical stinger (both exist in assets)
+                m_audio.playSfx("stingers/stinger_game_over", -1.0f);
+                m_audio.playStinger("stinger_game_over", +3.0f);
+            } else {
+                // WIN
+                m_audio.playStinger((m_state.gameType == GameType::ROGUE) ? "stinger_run_complete" : "stinger_level_clear", +2.5f);
+            }
+        }
+
         // Update hover state
         m_state.hoveredOverlayButton = -1;
         if (L.leftBtn.contains(px, py)) m_state.hoveredOverlayButton = 0;
@@ -453,6 +593,7 @@ void Game::update(const engine::Input& input) {
         if (click) {
             // Left button: Restart (for LEVELS mode, restart same level)
             if (L.leftBtn.contains(px, py)) {
+                m_audio.playSfx("ui/ui_confirm");
                 if (m_state.gameType == GameType::LEVELS) {
                     // Restart the same level (keep currentLevel)
                     init();
@@ -463,6 +604,7 @@ void Game::update(const engine::Input& input) {
             }
             // Right button: Back to Menu
             if (L.rightBtn.contains(px, py)) {
+                m_audio.playSfx("ui/ui_back");
                 m_state.mode = GameMode::MENU;
                 // LEVELS mode: return to level select
                 if (m_state.gameType == GameType::LEVELS) {
@@ -474,6 +616,10 @@ void Game::update(const engine::Input& input) {
                 return;
             }
         }
+
+        // Update prev trackers (early return)
+        m_prevMode = m_state.mode;
+        m_prevGameType = m_state.gameType;
         return;
     }
 
@@ -493,13 +639,28 @@ void Game::update(const engine::Input& input) {
         if (ball.attached) continue;
 
         // World collisions (walls)
-        CollisionSystem::handleWorldCollisions(ball, m_cfg);
+        if (CollisionSystem::handleWorldCollisions(ball, m_cfg)) {
+            m_audio.playSfx("game/hit_wall", -7.0f);
+        }
 
         // Paddle collision
-        CollisionSystem::handlePaddleCollision(ball, m_state, m_state.paddlePos, currentPaddleSize, m_cfg);
+        if (CollisionSystem::handlePaddleCollision(ball, m_state, m_state.paddlePos, currentPaddleSize, m_cfg)) {
+            m_audio.playSfx("game/hit_paddle", -4.5f);
+        }
 
         // Brick collisions
-        CollisionSystem::handleBrickCollisions(ball, m_state, m_cfg);
+        auto br = CollisionSystem::handleBrickCollisions(ball, m_state, m_cfg);
+        if (br.hit) {
+            if (br.fireball) {
+                m_audio.playSfx("bricks/brick_break", -2.0f);
+            } else if (br.broke) {
+                m_audio.playSfx("bricks/brick_break", -3.0f);
+            } else if (br.cracked) {
+                m_audio.playSfx("bricks/brick_crack", -6.0f);
+            } else {
+                m_audio.playSfx("bricks/hit_brick", -8.0f);
+            }
+        }
     }
 
     // Remove balls that were killed by one-shot effects (e.g., Fireball).
@@ -577,6 +738,9 @@ void Game::update(const engine::Input& input) {
                 m_state.mode = GameMode::WIN;
                 m_state.balls.clear();
                 m_state.powerups.clear();
+                // Immediate results music for Rogue win (returns early).
+                setMusic("music_results_loop", 0.25f);
+                m_audio.playStinger("stinger_run_complete", +2.5f);
                 return;
             }
 
@@ -714,9 +878,30 @@ void Game::update(const engine::Input& input) {
     // Update power-ups
     PowerUpSystem::updatePowerUps(m_state, m_cfg, dt);
 
+    // Powerup drop loop gate + pickup SFX (systems push types into GameState buffers)
+    bool hasPowerupNow = !m_state.powerups.empty();
+    if (hasPowerupNow != hadPowerupBefore) {
+        if (hasPowerupNow) m_audio.playSfx("powerups/powerup_drop", -4.0f);
+    }
+    if (!m_state.audioSpawnedPowerups.empty()) {
+        // Drop loop already sells the event; keep this silent to avoid spam.
+        m_state.audioSpawnedPowerups.clear();
+    }
+    if (!m_state.audioPickedPowerups.empty()) {
+        for (auto t : m_state.audioPickedPowerups) {
+            // Slight flavor per type
+            if (t == PowerUpType::EXPAND) m_audio.playSfx("powerups/powerup_expand_on", -3.0f);
+            else if (t == PowerUpType::SLOW) m_audio.playSfx("powerups/powerup_slow_on", -3.0f);
+            else if (t == PowerUpType::EXTRA_BALL) m_audio.playSfx("powerups/powerup_multiball_spawn", -2.0f);
+            else m_audio.playSfx("powerups/powerup_pickup", -3.0f);
+        }
+        m_state.audioPickedPowerups.clear();
+    }
+
     // Handle lives loss
     if (!m_state.winFinisherActive && m_state.balls.empty()) {
         m_state.lives--;
+        m_audio.playSfx("game/life_lost", -1.0f);
         // Losing a heart = -points (but Fireball one-shot respawn does NOT reach this path).
         int lossPenalty = m_cfg.lifeLossPenalty;
         if (m_state.gameType == GameType::ROGUE) {
@@ -759,6 +944,147 @@ void Game::update(const engine::Input& input) {
             m_state.mode = InitSystem::anyBricksAlive(m_state) ? GameMode::GAME_OVER : GameMode::WIN;
         }
     }
+
+    // Life gain (powerup / card effects)
+    if (m_state.lives > livesBefore) {
+        m_audio.playSfx("game/life_gain");
+        m_audio.playStinger("stinger_extra_life", +3.0f);
+    }
+
+    // Endless / Rogue danger warning loop (tension)
+    if ((m_state.gameType == GameType::ENDLESS || m_state.gameType == GameType::ROGUE) && m_state.mode == GameMode::PLAYING) {
+        if (m_state.endlessDangerActive && !dangerBefore) {
+            m_audio.playSfx("endless/endless_danger_start", -1.0f);
+            m_audio.setSfxLoopEnabled("endless/endless_warning_loop", true, 0.20f);
+        } else if (!m_state.endlessDangerActive && dangerBefore) {
+            m_audio.playSfx("endless/endless_warning_end", -2.0f);
+            m_audio.setSfxLoopEnabled("endless/endless_warning_loop", false, 0.20f);
+        }
+    } else {
+        // Only disable loops once when leaving PLAYING. Repeated fade resets can cause occasional audio weirdness.
+        if (modeBefore == GameMode::PLAYING && m_state.mode != GameMode::PLAYING) {
+            m_audio.setSfxLoopEnabled("endless/endless_warning_loop", false, 0.12f);
+        }
+    }
+
+    // Rows inserted (Endless / Rogue pacing punctuation)
+    if (m_state.gameType == GameType::ENDLESS && m_state.endlessRowsSpawned > endlessRowsBefore) {
+        m_audio.playSfx("endless/endless_column_spawn", -3.0f);
+    }
+
+    // Banking commit sound (when bank resets to 0 after being non-zero)
+    if ((m_state.gameType == GameType::ENDLESS || m_state.gameType == GameType::ROGUE) &&
+        m_state.endlessStreakPoints == 0 && streakBefore != 0) {
+        m_audio.playSfx("endless/endless_streak_bank", -3.0f);
+    }
+
+    // --- Music director (simple, fun, no layer system) ---
+    // Enter/exit PLAYING
+    if (modeBefore != m_state.mode || typeBefore != m_state.gameType) {
+        if (m_state.mode == GameMode::PLAYING) {
+            if (m_state.gameType == GameType::ENDLESS) {
+                setMusic("music_endless_loop", 0.25f);
+                m_endlessMusicTier = 0;
+            } else if (m_state.gameType == GameType::ROGUE) {
+                setMusic("music_rogue_act1_loop", 0.25f);
+            } else {
+                setMusic("music_gameplay_loop", 0.25f);
+            }
+        }
+    }
+
+    // Immediate GAME OVER music switch (some game-over paths change mode after the overlay handler has already been skipped).
+    if (modeBefore == GameMode::PLAYING && m_state.mode == GameMode::GAME_OVER) {
+        setMusic("music_results_loop", 0.25f);
+        m_audio.playSfx("stingers/stinger_game_over", -1.0f);
+        m_audio.playStinger("stinger_game_over", +3.0f);
+    }
+    // Returning from PAUSED to PLAYING: restore correct loop
+    if (modeBefore == GameMode::PAUSED && m_state.mode == GameMode::PLAYING) {
+        if (m_state.gameType == GameType::ENDLESS) {
+            int tier = 0;
+            // Faster hype ramp (Endless runs often don't last long enough to reach old thresholds).
+            if (m_state.endlessRowsSpawned >= 10) tier = 1;
+            if (m_state.endlessRowsSpawned >= 16) tier = 2;
+            m_endlessMusicTier = tier;
+            if (tier == 1) setMusic("music_endless_mid_loop", 0.18f);
+            else if (tier == 2) setMusic("music_endless_high_loop", 0.18f);
+            else setMusic("music_endless_loop", 0.18f);
+        } else if (m_state.gameType == GameType::ROGUE) {
+            int wave = std::max(1, m_state.wave);
+            if (wave >= m_state.rogueMaxWaves) setMusic("music_rogue_boss_loop", 0.18f);
+            else if (wave >= 7) setMusic("music_rogue_act3_loop", 0.18f);
+            else if (wave >= 4) setMusic("music_rogue_act2_loop", 0.18f);
+            else setMusic("music_rogue_act1_loop", 0.18f);
+        } else {
+            setMusic("music_gameplay_loop", 0.18f);
+        }
+    }
+
+    // Endless hype tiers (no layer system): switch loops at milestones
+    if (m_state.gameType == GameType::ENDLESS && m_state.mode == GameMode::PLAYING) {
+        int tier = 0;
+        // Faster hype ramp (Endless runs often don't last long enough to reach old thresholds).
+        if (m_state.endlessRowsSpawned >= 10) tier = 1;
+        if (m_state.endlessRowsSpawned >= 16) tier = 2;
+        if (tier != m_endlessMusicTier) {
+            m_endlessMusicTier = tier;
+            if (tier == 1) setMusic("music_endless_mid_loop", 0.35f);
+            else if (tier == 2) setMusic("music_endless_high_loop", 0.35f);
+            m_audio.playSfx("endless/endless_difficulty_up", -2.0f);
+            m_audio.playStinger("stinger_milestone", +3.0f);
+        }
+    }
+
+    // Rogue: wave/act punctuation + act music
+    if (m_state.gameType == GameType::ROGUE) {
+        if (m_state.wave != waveBefore) {
+            m_audio.playSfx("rogue/rogue_wave_clear", -1.5f);
+            m_audio.playStinger("stinger_wave_clear", +2.0f);
+        }
+        // When exiting cards back to gameplay: wave start stingers + act loop selection
+        if (modeBefore == GameMode::ROGUE_CARDS && m_state.mode == GameMode::PLAYING) {
+            m_audio.playSfx("rogue/rogue_wave_start", -2.0f);
+            m_audio.playStinger("stinger_wave_start", +2.0f);
+
+            int wave = std::max(1, m_state.wave);
+            if (wave >= m_state.rogueMaxWaves) {
+                setMusic("music_rogue_boss_loop", 0.35f);
+                m_audio.playSfx("rogue/rogue_boss_spawn", -2.0f);
+                m_audio.playStinger("stinger_boss_spawn", +3.0f);
+            } else if (wave >= 7) {
+                setMusic("music_rogue_act3_loop", 0.35f);
+            } else if (wave >= 4) {
+                setMusic("music_rogue_act2_loop", 0.35f);
+            } else {
+                setMusic("music_rogue_act1_loop", 0.35f);
+            }
+
+            // Elite stinger on wave 3/6/9 starts (fun punctuation)
+            if (wave % 3 == 0 && wave < m_state.rogueMaxWaves) {
+                m_audio.playSfx("rogue/rogue_elite_spawn", -2.0f);
+                m_audio.playStinger("stinger_elite_spawn", +3.0f);
+            }
+        }
+    }
+
+    // Update prev trackers for next frame (non-early-return path)
+    m_prevMode = m_state.mode;
+    m_prevGameType = m_state.gameType;
+    m_prevMenuScreen = m_state.currentMenuScreen;
+    m_prevHoveredMenuButton = m_state.hoveredMenuButton;
+    m_prevHoveredPlayModeButton = m_state.hoveredPlayModeButton;
+    m_prevShowInstructions = m_state.showInstructions;
+    m_prevInstructionsTab = m_state.instructionsTab;
+    m_prevHoveredCloseButton = m_state.hoveredCloseButton ? 1 : 0;
+    m_prevHoveredPowerupNav = m_state.hoveredPowerupNav;
+    m_prevHoveredRogueCard = m_state.hoveredRogueCard;
+    m_prevHoveredRoguePickBtn = m_state.hoveredRogueCardPickButton;
+    m_prevLives = m_state.lives;
+    m_prevWave = m_state.wave;
+    m_prevEndlessRowsSpawned = m_state.endlessRowsSpawned;
+    m_prevEndlessDangerActive = m_state.endlessDangerActive;
+    m_prevStreakPoints = m_state.endlessStreakPoints;
 }
 
 } // namespace game
