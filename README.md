@@ -22,7 +22,7 @@
 ### 1) Clone
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Fegue3/CG
 cd CG
 ```
 
