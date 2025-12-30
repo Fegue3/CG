@@ -83,13 +83,13 @@ To keep memory and load time reasonable, decoding keeps:
 You can tune these in:
 
 - `Breakout3D/Breakout3D/src/game/GameAssets.cpp` (decode cap/step + upload budget behavior)
-- `Breakout3D/Breakout3D/src/game/Game.cpp` (the `pumpPowerupVideoPreload(6)` call)
+- `Breakout3D/Breakout3D/src/game/GameUpdate.cpp` (the `pumpPowerupVideoPreload(6)` call)
 
 ## Render path
 
 The Powerups inspector draws the current GIF frame as a textured UI quad in:
 
-- `Breakout3D/Breakout3D/src/game/render/MenuRender.cpp`
+- `Breakout3D/Breakout3D/src/game/render/menu/MenuRenderInstructionsOverlay.cpp` (Powerups tab)
 
 ## Notes / caveats
 

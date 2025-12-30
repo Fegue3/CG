@@ -49,7 +49,7 @@ The instructions screen includes tabs:
 
 Implementation references:
 
-- Rendering: `Breakout3D/Breakout3D/src/game/render/MenuRender.cpp`
+- Rendering: `Breakout3D/Breakout3D/src/game/render/MenuRender.cpp` (facade) + `Breakout3D/Breakout3D/src/game/render/menu/*` (implementation)
 - Input/hit-testing: `Breakout3D/Breakout3D/src/game/systems/InputSystem.cpp`
 
 ### Hidden “one brick” test level (non-debug)
@@ -59,7 +59,7 @@ There is a small clickable badge inside the **EXIT** button:
 - Click the little **“4”** badge labeled “ONE BRICK”
   - Starts a tiny Normal-mode test level with a minimal brick setup (useful for quick checks).
 
-Implementation reference: `game/systems/InputSystem.cpp` (menu hit-testing) and `game/render/MenuRender.cpp` (menu rendering).
+Implementation reference: `game/systems/InputSystem.cpp` (menu hit-testing) and `game/render/menu/*` (menu rendering).
 
 ---
 
@@ -108,8 +108,8 @@ These are clickable buttons drawn as part of the UI overlay, and they work via m
 Important implementation detail:
 
 - Layout is centralized in `game/ui/OverlayLayout.hpp` and used by both:
-  - `game/render/MenuRender.cpp` (drawing)
-  - `game/Game.cpp` (click hit-testing)
+  - `game/render/hud/PauseEndOverlays.cpp` (drawing)
+  - `game/GameUpdate.cpp` (click hit-testing)
 
 ---
 
@@ -226,6 +226,6 @@ In `PLAYING` mode:
   - **6** (`K6`): **SHIELD**
   - **7** (`K7`): **REVERSE**
 
-Implementation reference: `game/Game.cpp` (debug section guarded by `#ifdef BREAKOUT3D_DEBUG`).
+Implementation reference: `game/GameUpdate.cpp` (debug section guarded by `#ifdef BREAKOUT3D_DEBUG`).
 
 

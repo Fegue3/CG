@@ -34,7 +34,7 @@
 
 ## Critical Implementation Details
 
-### Level Select Screen (`MenuRender.cpp` + `InputSystem.cpp`)
+### Level Select Screen (`MenuRender` + `InputSystem.cpp`)
 - **Grid Layout**: 4 rows × 5 columns (20 buttons)
 - **Panel Position**: fbH × 0.40f (synchronized across render and input)
 - **Button Size**: 110×110 pixels
@@ -64,7 +64,7 @@ Each level in `LevelLayouts.hpp` enforces minimum HP:
   - Levels 11-20: Completely new with difficulty tiers
   - All 20 levels now with correct hp and grid dimensions
 
-- **`src/game/render/MenuRender.cpp`**: 
+- **`src/game/render/menu/MenuRenderLevelSelect.cpp`**: 
   - Panel position: fbH × 0.40f
   - Grid: 4×5 layout (20 buttons)
   - Maintains hover effects and button rendering

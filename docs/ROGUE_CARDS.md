@@ -6,7 +6,7 @@ Source code:
 
 - Card ids: `Breakout3D/Breakout3D/include/game/rogue/RogueCardId.hpp`
 - Card metadata + effects + offer gating: `Breakout3D/Breakout3D/src/game/rogue/RogueCards.cpp`
-- Offer timing (start-of-run + between waves): `Breakout3D/Breakout3D/src/game/Game.cpp`
+- Offer timing (start-of-run + between waves): `Breakout3D/Breakout3D/src/game/GameUpdate.cpp`
 
 ---
 

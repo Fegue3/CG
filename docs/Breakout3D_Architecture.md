@@ -66,7 +66,11 @@ Breakout3D/Breakout3D/
       Renderer.cpp
 
     game/
-      Game.cpp
+      Game.cpp (ctor/init)
+      GameUpdate.cpp (update loop)
+      GameRender.cpp (render loop)
+      GameUpdate.cpp
+      GameRender.cpp
       GameState.cpp
       GameConfig.cpp
       GameAssets.cpp
@@ -77,6 +81,13 @@ Breakout3D/Breakout3D/
         PhysicsSystem.cpp
         CollisionSystem.cpp
         PowerUpSystem.cpp
+
+      render/menu/
+        MenuRenderBase.cpp
+        MenuRenderScreens.cpp
+        MenuRenderPlayModes.cpp
+        MenuRenderLevelSelect.cpp
+        MenuRenderInstructionsOverlay.cpp
 ```
 
 ---

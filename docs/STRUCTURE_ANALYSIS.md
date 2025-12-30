@@ -47,7 +47,7 @@ This makes feature changes and debugging significantly easier.
 
 The best-score file path logic is implemented in both:
 
-- `Breakout3D/Breakout3D/src/game/Game.cpp`
+- `Breakout3D/Breakout3D/src/game/GameUpdate.cpp`
 - `Breakout3D/Breakout3D/src/game/systems/InitSystem.cpp`
 
 These can be deduplicated into a shared helper if desired.

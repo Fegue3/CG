@@ -63,7 +63,7 @@ Row 2:  [MOD][MOD][MOD][MOD][MOD][MOD][MOD][MOD][MOD][MOD]
    - Tooltip positioned at `panelY2 + 150.0f` for spacing from buttons
    - Tooltip size: 500×180px
 
-6. **`src/game/Game.cpp`**:
+6. **`src/game/GameUpdate.cpp`**:
    - Updated hover detection for grid layout
    - Max 20 cards displayed (2×10 grid)
    - Debug command: Press R to fill rogueChosen with 20 sample cards

@@ -21,7 +21,8 @@ Inside the menu, the UI uses a screen state:
 See:
 
 - state: `include/game/GameState.hpp`
-- rendering: `src/game/render/MenuRender.cpp`
+- rendering facade: `src/game/render/MenuRender.cpp`
+- rendering implementation: `src/game/render/menu/*`
 - input/hit-testing: `src/game/systems/InputSystem.cpp`
 
 ---

@@ -7,7 +7,7 @@ Rogue Mode is a **wave-based run** where you draft **Rogue cards** between waves
 Key files:
 
 - `include/game/GameState.hpp` (Rogue state fields)
-- `src/game/Game.cpp` (wave progression loop + card offer scheduling + row insertion cadence)
+- `src/game/GameUpdate.cpp` (wave progression loop + card offer scheduling + row insertion cadence)
 - `src/game/systems/RogueSystem.cpp` (wave rules, brick difficulty curve, persistence)
 - `src/game/rogue/RogueCards.cpp` (card pools, gating rules, and card effects)
 - `src/game/systems/PowerUpSystem.cpp` (Rogue drop-deck behavior)
@@ -35,7 +35,7 @@ Waves advance by **quota and/or time**, not by clearing all bricks:
   - enough bricks were broken this wave (quota), and a minimum time has passed, OR
   - a time limit is reached (fallback so waves always progress)
 
-Implementation: `Game.cpp` calls:
+Implementation: `GameUpdate.cpp` calls:
 
 - `RogueSystem::bricksRequiredForWave(wave)`
 - `RogueSystem::minTimeForWave(wave)`
@@ -50,7 +50,7 @@ After a wave advances, Rogue can offer a 3-card pack:
 - **OP packs**:
   - offered at the **start of waves 3/6/9/...** (i.e., after clearing 2/5/8/...)
 
-Implementation: `Game.cpp` + `RogueCards::dealOffer(...)`.
+Implementation: `GameUpdate.cpp` + `RogueCards::dealOffer(...)`.
 
 ---
 
@@ -111,7 +111,7 @@ Implementation:
 
 - queue size: `RogueSystem::rowsToInsertForWave(...)`
 - insertion: `RogueSystem::spawnWaveRows(...)`
-- cadence: driven in `Game.cpp`
+- cadence: driven in `GameUpdate.cpp`
 
 ---
 

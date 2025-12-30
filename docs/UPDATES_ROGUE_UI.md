@@ -64,13 +64,13 @@ This document summarizes the recent improvements made to the Rogue Mode UI and c
 
 **Implementation:**
 - Added `hoveredRogueCardPickButton` to `GameState` to track button-specific hover
-- Implemented precise hit-testing for the button rectangle in `Game.cpp`
+- Implemented precise hit-testing for the button rectangle in `GameUpdate.cpp`
 - Button animation uses same RGB neon formula as card: `hue = fmod(0.56f + 0.08f * sin(time * 1.2f), 1.0f)`
 - Animation only renders when mouse is directly over the button
 
 **Files Modified:**
 - `include/game/GameState.hpp`
-- `src/game/Game.cpp`
+- `src/game/GameUpdate.cpp`
 - `src/game/rogue/RogueCards.cpp`
 - `src/game/systems/RogueSystem.cpp`
 - `src/game/render/hud/PauseEndOverlays.cpp`

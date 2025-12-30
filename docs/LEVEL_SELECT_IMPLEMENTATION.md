@@ -57,8 +57,9 @@ int levelsCompletedStars[20] = {0}; // 0-3 estrelas por nível (agora 20 níveis
 int hoveredLevelButton = -1; // -1 = nenhum, 0-19 = índice do nível
 ```
 
-#### 2. **MenuRender.cpp**
+#### 2. **Menu rendering**
 - Novo renderizador para `MenuScreen::LEVEL_SELECT`
+- Agora implementado em `src/game/render/menu/MenuRenderLevelSelect.cpp`
 - Grade de **20 botões** de nível (4 linhas × 5 colunas) com:
   - Número do nível (grande e centralizado)
   - 3 estrelas embaixo (preenchidas conforme desempenho)
@@ -80,7 +81,7 @@ int hoveredLevelButton = -1; // -1 = nenhum, 0-19 = índice do nível
 - **Hit Detection Formula**: `screenY = fbH - y - btnSize`
 - Cálculo de posição da grade idêntico ao rendering (20 botões em grid 4×5)
 
-#### 4. **Game.cpp**
+#### 4. **Game update / flow**
 - **Level Complete**: 
   - Calcula estrelas baseado em vidas restantes
   - Atualiza `levelsCompletedStars[levelIdx]` (guarda melhor)
@@ -89,6 +90,8 @@ int hoveredLevelButton = -1; // -1 = nenhum, 0-19 = índice do nível
 - **GAME OVER/WIN**:
   - Botão "Restart" no modo LEVELS retorna ao level select
   - Botão "Menu" no modo LEVELS retorna ao level select
+
+Implementação principal agora vive em `src/game/GameUpdate.cpp` (lógica/fluxo).
 
 ### Estruturas de Dados
 

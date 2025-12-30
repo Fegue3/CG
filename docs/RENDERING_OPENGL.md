@@ -62,7 +62,8 @@ The menu is drawn using real font metrics and cached layout rectangles in `GameS
 
 See:
 
-- `src/game/render/MenuRender.cpp` (visuals)
+- `src/game/render/MenuRender.cpp` (menu facade / entry point)
+- `src/game/render/menu/*` (menu implementation)
 - `src/game/systems/InputSystem.cpp` (hit-testing + state changes)
 
 ---
@@ -161,9 +162,10 @@ The game/UI code uses a legacy “scale” concept; the renderer maps that onto 
   - `include/engine/Mesh.hpp`, `src/engine/Mesh.cpp`
 
 - **Game rendering orchestration**:
-  - `src/game/Game.cpp` (calls into world + UI render paths)
+  - `src/game/GameRender.cpp` (calls into world + UI render paths)
   - `src/game/render/WorldRender.cpp`
   - `src/game/render/UIRender.cpp`
-  - `src/game/render/MenuRender.cpp`
+  - `src/game/render/MenuRender.cpp` + `src/game/render/menu/*`
+  - `src/game/render/menu/*` (menu implementation split by screen/feature)
 
 
