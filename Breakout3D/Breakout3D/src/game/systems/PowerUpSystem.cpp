@@ -20,6 +20,7 @@ void PowerUpSystem::spawnPowerUp(GameState& state, const glm::vec3& pos, float c
         p.pos.y = 0.4f;
         p.type = state.rogueDropDeck[(size_t)(rand() % state.rogueDropDeck.size())];
         state.powerups.push_back(p);
+        state.audioSpawnedPowerups.push_back(p.type);
         return;
     }
 
@@ -45,6 +46,7 @@ void PowerUpSystem::spawnPowerUp(GameState& state, const glm::vec3& pos, float c
     else               p.type = PowerUpType::TINY;       // 7%
     
     state.powerups.push_back(p);
+    state.audioSpawnedPowerups.push_back(p.type);
 }
 
 void PowerUpSystem::applyPowerUpEffect(GameState& state, const GameConfig& cfg, PowerUpType type) {
@@ -162,6 +164,7 @@ void PowerUpSystem::updatePowerUps(GameState& state, const GameConfig& cfg, floa
             }
 
             applyPowerUpEffect(state, cfg, p.type);
+            state.audioPickedPowerups.push_back(p.type);
             p.alive = false;
         }
 
