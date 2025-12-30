@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vector>
+#include <cstdint>
 #include "game/entities/Brick.hpp"
 #include "game/entities/Ball.hpp"
 #include "game/entities/PowerUp.hpp" // includes PowerUpType enum
@@ -70,6 +71,11 @@ struct GameState {
     
     std::vector<Ball> balls;
     std::vector<PowerUp> powerups;
+
+    // --- Transient audio event buffers (cleared/consumed by Game::update) ---
+    // Powerup spawn/pick events happen inside systems (PowerUpSystem) where audio isn't available.
+    std::vector<PowerUpType> audioSpawnedPowerups;
+    std::vector<PowerUpType> audioPickedPowerups;
 
     std::vector<Brick> bricks;
 
