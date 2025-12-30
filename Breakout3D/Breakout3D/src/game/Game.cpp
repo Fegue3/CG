@@ -99,6 +99,41 @@ void Game::update(const engine::Input& input) {
         if (input.keyPressed(engine::Key::K6)) spawnDebugDrop(PowerUpType::SHIELD);
         if (input.keyPressed(engine::Key::K7)) spawnDebugDrop(PowerUpType::REVERSE);
     }
+
+    // Debug: fill Rogue cards (press R in ROGUE mode to max out cards)
+    if (m_state.gameType == GameType::ROGUE && input.keyPressed(engine::Key::R)) {
+        // Fill with all available cards up to max 20
+        m_state.rogueChosen.clear();
+        
+        // Add all cards from the enum
+        const game::rogue::RogueCardId allCards[] = {
+            game::rogue::RogueCardId::PU_EXPAND,
+            game::rogue::RogueCardId::PU_EXTRA_BALL,
+            game::rogue::RogueCardId::PU_EXTRA_LIFE,
+            game::rogue::RogueCardId::PU_FIREBALL,
+            game::rogue::RogueCardId::PU_SHIELD,
+            game::rogue::RogueCardId::PU_SLOW,
+            game::rogue::RogueCardId::PU_REVERSE,
+            game::rogue::RogueCardId::PU_TINY,
+            game::rogue::RogueCardId::MOD_WIDE_PADDLE_SLOW,
+            game::rogue::RogueCardId::MOD_WIDE_PADDLE_LIGHT_BALL,
+            game::rogue::RogueCardId::MOD_FAST_PADDLE_TINY_PADDLE,
+            game::rogue::RogueCardId::MOD_FAST_BALL_SLOW_PADDLE,
+            game::rogue::RogueCardId::MOD_LUCKY_DROPS_BRITTLE,
+            game::rogue::RogueCardId::MOD_LUCKY_DROPS_SLOW_BALL,
+            game::rogue::RogueCardId::MOD_BONUS_LIFE_TAX,
+            game::rogue::RogueCardId::MOD_GLASS_CANNON,
+            game::rogue::RogueCardId::MOD_STREAK_GREED,
+            game::rogue::RogueCardId::MOD_SAFE_BANKER,
+            game::rogue::RogueCardId::MOD_SHIELD_LONG_SLOW,
+            game::rogue::RogueCardId::MOD_FIREBALL_WIDE_SLOW,
+        };
+        
+        for (const auto& card : allCards) {
+            if (m_state.rogueChosen.size() >= 20) break;
+            m_state.rogueChosen.push_back(card);
+        }
+    }
 #endif
 
     // =========== MENU LOGIC ===========
@@ -213,12 +248,64 @@ void Game::update(const engine::Input& input) {
         float py = (float)fbH - py_raw;
         bool click = input.mousePressed(engine::MouseButton::Left);
 
-        const auto L = game::ui::pauseOverlay(fbW, fbH);
+        // Use larger panel for ROGUE mode
+        const auto L = (m_state.gameType == GameType::ROGUE && !m_state.rogueChosen.empty())
+            ? game::ui::pauseOverlayRogue(fbW, fbH)
+            : game::ui::pauseOverlay(fbW, fbH);
 
-        // Update hover state
+        // Update hover state for buttons
         m_state.hoveredOverlayButton = -1;
         if (L.leftBtn.contains(px, py)) m_state.hoveredOverlayButton = 0;
         else if (L.rightBtn.contains(px, py)) m_state.hoveredOverlayButton = 1;
+
+        // Update hover state for Rogue cards (if in ROGUE mode)
+        m_state.hoveredPauseRogueCard = -1;
+        if (m_state.gameType == GameType::ROGUE && !m_state.rogueChosen.empty()) {
+            float panelX = L.panel.x;
+            float panelY = L.panel.y;
+            float panelH = L.panel.h;
+            
+            // Badge grid positioning (must match rendering in PauseEndOverlays.cpp)
+            float titleH = 22.0f;
+            float titleY = panelY + panelH - titleH - 165.0f;
+            
+            float badgeStartY = titleY - 80.0f;  // More space below title
+            float badgeBaseW = 50.0f;
+            float badgeBaseH = 50.0f;
+            float badgeGap = 10.0f;  // 10px spacing between columns
+            float badgeRowGap = 80.0f;  // Increased spacing between rows
+            float badgesPerRow = 10;  // 10 columns for 2 rows layout
+            
+            // Calculate starting X
+            float totalWidth = badgesPerRow * badgeBaseW + (badgesPerRow - 1) * badgeGap;
+            float badgeStartX = panelX + (L.panel.w - totalWidth) * 0.5f;
+            
+            int rowIdx = 0;
+            int colIdx = 0;
+            int cardCount = 0;
+            
+            for (size_t i = 0; i < m_state.rogueChosen.size() && cardCount < 20; ++i) {
+                // Badge position (fixed, doesn't move on hover)
+                float badgeX = badgeStartX + colIdx * (badgeBaseW + badgeGap);
+                float badgeY = badgeStartY - rowIdx * badgeRowGap;  // Use badgeRowGap for more spacing
+                float badgeW = badgeBaseW;
+                float badgeH = badgeBaseH;
+                
+                // Check hit
+                if (px >= badgeX && px <= badgeX + badgeW && 
+                    py >= badgeY && py <= badgeY + badgeH) {
+                    m_state.hoveredPauseRogueCard = (int)i;
+                    break;
+                }
+                
+                colIdx++;
+                if (colIdx >= (int)badgesPerRow) {
+                    colIdx = 0;
+                    rowIdx++;
+                }
+                cardCount++;
+            }
+        }
 
         if (click) {
             // Left button: Restart
