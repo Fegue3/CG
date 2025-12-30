@@ -26,6 +26,7 @@ static int keyToGlfw(Key k) {
         case Key::K0:     return GLFW_KEY_0;
         case Key::Minus:  return GLFW_KEY_MINUS;
         case Key::L:      return GLFW_KEY_L;
+        case Key::R:      return GLFW_KEY_R;
     }
     return GLFW_KEY_UNKNOWN;
 }
