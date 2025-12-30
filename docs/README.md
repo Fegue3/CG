@@ -18,6 +18,19 @@ This folder is meant to be the **single source of truth** for:
 
 ---
 
+## Quick reference (implementation docs)
+
+These are short “how it works” docs that match the current codebase:
+
+- **`BUILD.md`**: build + run instructions
+- **`TROUBLESHOOTING.md`**: common problems (including “no sound”)
+- **`ARCHITECTURE.md`**: high-level structure + update-module split
+- **`AUDIO.md`**: audio implementation (miniaudio, mixing, music switching)
+- **`SHADERS.md`**: shader files + uniforms (UI vs 3D usage)
+- **`ASSETS_QUICK.md`**: asset folder layout + naming conventions
+
+---
+
 ## Gameplay & rules (deep dives)
 
 - **`ENDLESS_MODE.md`**: Endless rules, spawn logic, scoring/banking, danger UI, persistence.

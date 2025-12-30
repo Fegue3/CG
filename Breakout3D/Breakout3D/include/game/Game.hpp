@@ -22,6 +22,33 @@ public:
     void render();
 
 private:
+    // Internal update helpers (to keep GameUpdate.cpp small and readable).
+    void setMusic(const std::string& group, float fadeSeconds);
+    bool updateMenu(const engine::Input& input);
+    bool updateWinFinisher(float dt);
+    bool updateRogueCardsOverlay(const engine::Input& input);
+    bool updatePausedOverlay(const engine::Input& input);
+    bool updateEndOverlay(const engine::Input& input);
+    void updateTimers(const engine::Input& input, float dt);
+    void updatePlayingFrame(
+        const engine::Input& input,
+        float dt,
+        GameMode modeBefore,
+        GameType typeBefore,
+        int livesBefore,
+        int waveBefore,
+        int endlessRowsBefore,
+        bool dangerBefore,
+        int streakBefore,
+        bool hadPowerupBefore
+    );
+
+    // Shared helpers for Endless/Rogue bookkeeping.
+    static std::string endlessBestScorePath();
+    static void saveEndlessBestScore(int best);
+    static void commitEndlessStreak(GameState& state);
+    static void maybeUpdateEndlessBest(GameState& state);
+
     engine::Window& m_window;
     engine::Time& m_time;
     engine::Renderer& m_renderer;
