@@ -35,7 +35,8 @@ bool Window::create(int width, int height, const std::string& title, bool fullsc
 
     m_window = w;
     glfwMakeContextCurrent(w);
-    glfwSwapInterval(1);
+    // Disable V-Sync (uncap FPS). Set to 1 to enable V-Sync.
+    glfwSwapInterval(0);
 
     // Callbacks (scroll, etc.)
     glfwSetWindowUserPointer(w, this);
