@@ -1,86 +1,104 @@
+// GameState.hpp
 #pragma once
 #include <glm/glm.hpp>
 #include <vector>
 #include <cstdint>
+
 #include "game/entities/Brick.hpp"
 #include "game/entities/Ball.hpp"
-#include "game/entities/PowerUp.hpp" // includes PowerUpType enum
+#include "game/entities/PowerUp.hpp" // inclui PowerUpType
 #include "game/ui/OverlayLayout.hpp"
 #include "game/rogue/RogueCardId.hpp"
 
 namespace game {
 
+/**
+ * @file GameState.hpp
+ * @brief Estado central do jogo (modo actual, entidades, timers, UI e dados específicos de cada modo).
+ *
+ * O `GameState` é o “cérebro” do runtime: guarda tudo o que muda durante o jogo.
+ * Está organizado por blocos:
+ * - modo e tipo de jogo (menu/playing/pausa/etc.)
+ * - estado de gameplay (vidas, score, wave, entidades)
+ * - timers e efeitos (power-ups, fireball VFX, finisher de vitória)
+ * - estado de UI (hover/drag/click edge, layouts calculados)
+ * - dados específicos de modos (Endless, Rogue, Levels)
+ *
+ * @note
+ * Muitos “eventos” (ex.: power-ups apanhados) são registados aqui para o `Game::update`
+ * conseguir tocar áudio e aplicar UI sem depender dos sistemas onde o evento aconteceu.
+ */
+
 enum class GameMode {
     MENU,
     PLAYING,
     PAUSED,
-    ROGUE_CARDS, // Rogue mode: pick a reward card (gameplay paused)
+    ROGUE_CARDS, // Rogue: escolha de carta (gameplay em pausa)
     GAME_OVER,
     WIN
 };
 
 enum class GameType {
-    NORMAL,   // Normal mode: Win when all bricks destroyed
-    ENDLESS,  // Endless mode: Infinite waves, no WIN state
-    ROGUE,    // Future: Rogue mode (placeholder)
-    LEVELS    // Future: Levels mode (placeholder)
+    NORMAL,   // Normal: ganha quando todos os bricks forem destruídos
+    ENDLESS,  // Endless: waves infinitas, não existe estado WIN
+    ROGUE,    // Rogue: waves + cartas (run)
+    LEVELS    // Levels: níveis fixos (1..20)
 };
 
 enum class MenuScreen {
-    MAIN,       // Main menu: Play, Instructions, Options, Exit
-    PLAY_MODES, // Play modes submenu: Normal, Endless, Rogue, Levels, Back
-    LEVEL_SELECT, // Level select screen for LEVELS mode
-    INSTRUCTIONS, // Instructions screen: Controls, Powerups, Back
-    OPTIONS,    // Options submenu: Sound, Graphics, Back
-    SOUND       // Sound settings screen (sliders)
+    MAIN,         // Menu principal
+    PLAY_MODES,   // Submenu de modos
+    LEVEL_SELECT, // Seleção de nível (Levels)
+    INSTRUCTIONS, // Instruções
+    OPTIONS,      // Opções
+    SOUND         // Som (sliders)
 };
 
-// PowerUpType is now defined in game/entities/PowerUp.hpp
+// PowerUpType é definido em game/entities/PowerUp.hpp
 
 struct GameState {
+    // --- Estado global (máquina de estados) ---
     GameMode mode = GameMode::MENU;
     GameType gameType = GameType::NORMAL;
 
     int lives = 3;
     int score = 0;
-    
-    // Levels mode: current level (1-20)
-    int currentLevel = 1;
-    int levelsBestLevel = 1; // highest level reached (persistent)
-    int levelsCompletedStars[20] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 0-3 stars per level
-    int hoveredLevelButton = -1; // -1 = none, 0-19 = level index
-    int hoveredPauseRogueCard = -1; // -1 = none, else index into rogueChosen (for pause menu hover)
-    
-    // Endless mode: persistent best score (loaded on init, updated/saved during play)
-    int endlessBestScore = 0;
-    // Endless mode: "streak bank" — points accumulate here and commit to score
-    // after a short idle delay (or immediately on game over).
+
+    // ------------------------- LEVELS MODE -------------------------
+    int currentLevel = 1;        // nível actual (1-20)
+    int levelsBestLevel = 1;     // melhor nível atingido (persistente)
+    int levelsCompletedStars[20] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 0-3 estrelas por nível
+    int hoveredLevelButton = -1; // -1 nenhum, 0-19 índice do nível
+    int hoveredPauseRogueCard = -1; // hover na lista de cartas (pausa do Rogue)
+
+    // ------------------------- ENDLESS MODE -------------------------
+    int endlessBestScore = 0;    // recorde (carregado no init, guardado ao longo do jogo)
+
+    // “Streak bank”: pontos acumulam e só entram no score após um curto delay de “idle”.
     int endlessStreakPoints = 0;
-    // Split view of the bank so we can show "+gains" and "-penalties" simultaneously.
-    // Net is still `endlessStreakPoints` (pos - neg).
-    int endlessStreakPosPoints = 0;
-    int endlessStreakNegPoints = 0;
+    int endlessStreakPosPoints = 0; // para UI: ganhos
+    int endlessStreakNegPoints = 0; // para UI: penalizações
     float endlessStreakIdleTimer = 0.0f;
     bool endlessStreakBanking = false;
     float endlessStreakBankTimer = 0.0f;
-    int wave = 1;  // Endless mode wave counter
-    int bricksDestroyedThisWave = 0;  // Counter for endless mode spawning
-    int endlessRowsSpawned = 0;       // Total rows spawned in endless (for HP scaling)
-    int pendingSpawnBricks = 0;       // Defer spawn to avoid mutating while iterating
 
+    int wave = 1;
+    int bricksDestroyedThisWave = 0;
+    int endlessRowsSpawned = 0;
+    int pendingSpawnBricks = 0; // spawn adiado para não mexer em listas durante iteração
+
+    // ------------------------- ENTIDADES -------------------------
     glm::vec3 paddlePos = {0.0f, 0.0f, 0.0f};
-    
+
     std::vector<Ball> balls;
     std::vector<PowerUp> powerups;
+    std::vector<Brick> bricks;
 
-    // --- Transient audio event buffers (cleared/consumed by Game::update) ---
-    // Powerup spawn/pick events happen inside systems (PowerUpSystem) where audio isn't available.
+    // --- Buffers de eventos para áudio (limpos/consumidos no Game::update) ---
     std::vector<PowerUpType> audioSpawnedPowerups;
     std::vector<PowerUpType> audioPickedPowerups;
 
-    std::vector<Brick> bricks;
-
-    // Powerup Timers
+    // ------------------------- TIMERS DE POWER-UPS -------------------------
     float expandTimer = 0.0f;
     float slowTimer = 0.0f;
     float fireballTimer = 0.0f;
@@ -88,13 +106,13 @@ struct GameState {
     float reverseTimer = 0.0f;
     float tinyTimer = 0.0f;
 
+    // ------------------------- FIREBALL (VFX/FEEDBACK) -------------------------
     struct FireballExplosionFx {
         glm::vec3 pos = glm::vec3(0.0f);
-        float t = 0.0f; // seconds since spawn
+        float t = 0.0f; // segundos desde spawn
     };
     std::vector<FireballExplosionFx> fireballExplosions;
 
-    // Fireball impact "break" feel
     float fireballShakeTimer = 0.0f;
     glm::vec3 fireballShakeAnchorPos = glm::vec3(0.0f);
 
@@ -105,148 +123,148 @@ struct GameState {
     };
     std::vector<FireballShard> fireballShards;
 
-    // Score popups (used for negative penalties and positive instant awards like Fireball)
+    // Popups de score (positivos e negativos).
     struct ScorePopup {
-        int pts = 0;      // can be negative
-        float t = 0.0f;   // seconds since spawn
+        int pts = 0;     // pode ser negativo
+        float t = 0.0f;  // segundos desde spawn
     };
     std::vector<ScorePopup> scorePopups;
 
-    // When a one-shot fireball projectile is consumed, we respawn a normal ball
-    // without costing a life (so Fireball doesn't "eat" a heart).
+    // Quando um fireball one-shot é consumido, respawn de bola normal sem gastar vida.
     bool pendingRespawnAfterFireball = false;
 
-    // evita múltiplos hits por overlap
+    // Evita múltiplos hits por overlap no mesmo instante.
     float brickHitCooldown = 0.0f;
 
-    // Debug ping: shows a HUD flash when bricks spawn
+    // Debug/Endless timers auxiliares.
     float spawnPingTimer = 0.0f;
-    float endlessSpawnCooldown = 0.0f; // seconds between auto spawns
-    float endlessAutoTimer = 0.0f;      // periodic auto-spawn timer
-    float endlessElapsedTime = 0.0f;    // total time spent in endless mode (playing)
+    float endlessSpawnCooldown = 0.0f;
+    float endlessAutoTimer = 0.0f;
+    float endlessElapsedTime = 0.0f;
 
-    // UI click edge
-    bool mouseWasDown = false;
+    // ------------------------- UI / INPUT STATE -------------------------
+    bool mouseWasDown = false; // edge de clique (para não repetir “click” enquanto está premido)
     int cameraMode = 1;
     int currentBg = -1;
 
-    // --- Rogue mode (wave-based) ---
-    // Rewards are presented as "cards" between waves (and at run start).
-    int rogueRewardEvery = 1; // show cards after every wave (user request)
-    // Current offer (up to 3 cards) + hover index.
+    // ------------------------- ROGUE MODE -------------------------
+    int rogueRewardEvery = 1; // mostrar cartas após cada wave (pedido do utilizador)
+
+    // Oferta actual (até 3 cartas) + hover.
     game::rogue::RogueCardId rogueOffer[3] = {
         game::rogue::RogueCardId::PU_EXPAND,
         game::rogue::RogueCardId::PU_EXTRA_BALL,
         game::rogue::RogueCardId::PU_EXTRA_LIFE
     };
     int rogueOfferCount = 0;
-    int hoveredRogueCard = -1; // -1 none, 0..2
-    int hoveredRogueCardPickButton = -1; // -1 none, 0..2 (specific to PICK button hover)
+    int hoveredRogueCard = -1; // -1 nenhum, 0..2
+    int hoveredRogueCardPickButton = -1; // hover do botão PICK por carta
 
-    // Chosen cards (no repeats) and "drop deck" (powerup types that can drop from bricks).
+    // Picks (sem repetição) e deck de drops (powerups que podem cair dos bricks).
     std::vector<game::rogue::RogueCardId> rogueChosen;
     std::vector<PowerUpType> rogueDropDeck;
 
-    // Remaining pools for no-repeat dealing.
+    // Pools restantes para garantir “sem repetição”.
     std::vector<game::rogue::RogueCardId> rogueRemainingNormal;
     std::vector<game::rogue::RogueCardId> rogueRemainingOp;
 
-    // Starting draft: wave 1 begins with 3 rounds of 3-card choices before gameplay.
     int rogueStartingDraftRoundsLeft = 0;
 
-    // Persistent modifiers (applied immediately on pick; many have trade-offs).
+    // Modificadores persistentes da run (aplicados ao escolher cartas).
     float rogueDropChanceMult = 1.0f;
     float rogueBasePaddleScaleX = 1.0f;
     float roguePaddleSpeedMult = 1.0f;
     float rogueBallSpeedMult = 1.0f;
-    float rogueBrickPointsMult = 1.0f; // affects brick point awards
-    float rogueBankIdleMult = 1.0f;    // >1 = safer (longer to bank), <1 = riskier
-    int rogueBrickDamageBonus = 0;     // extra damage per normal hit (e.g. Pierce Training)
+    float rogueBrickPointsMult = 1.0f;
+    float rogueBankIdleMult = 1.0f;
+    int rogueBrickDamageBonus = 0;
     float rogueFireballRadiusMult = 1.0f;
     float rogueShieldDurationMult = 1.0f;
-    int rogueLifeLossPenaltyBonus = 0; // additive penalty in addition to cfg.lifeLossPenalty
-    int rogueRowsPerWaveDelta = 0;      // negative reduces rows inserted per wave (Row Control)
-    float rogueWindX = 0.0f;            // environment: constant lateral wind applied to balls
-    bool rogueRandomWindActive = false; // environment: random wind pushes balls left/right
-    float rogueRandomWindTimer = 0.0f;  // internal timer for random wind updates
-    float roguePaddleClampMarginX = 0.0f; // environment: reduces paddle range from walls
-    bool rogueStickyPaddle = false;     // environment: balls stick to paddle on hit (non-fireball)
-    int rogueMaxWaves = 10; // run ends (WIN) after clearing this wave number
-    int rogueBestScore = 0; // persistent best score for Rogue (separate from Endless)
+    int rogueLifeLossPenaltyBonus = 0;
+    int rogueRowsPerWaveDelta = 0;
 
-    // Wave advancement in Rogue is NOT "clear all bricks". It's quota/time based:
+    // Ambiente (efeitos “de sala”).
+    float rogueWindX = 0.0f;
+    bool rogueRandomWindActive = false;
+    float rogueRandomWindTimer = 0.0f;
+    float roguePaddleClampMarginX = 0.0f;
+    bool rogueStickyPaddle = false;
+
+    int rogueMaxWaves = 10; // run termina (WIN) ao limpar esta wave
+    int rogueBestScore = 0; // recorde Rogue (persistente, separado do Endless)
+
+    // Avanço de wave no Rogue: por quota/tempo (não é “limpar todos os bricks”).
     int rogueBricksBrokenThisWave = 0;
     float rogueWaveTimer = 0.0f;
-    float rogueWaveCooldown = 0.0f; // small gate to prevent double-advance in the same frame
-    int rogueRowsSpawned = 0; // counts rows inserted so far (used for pacing/difficulty if needed)
+    float rogueWaveCooldown = 0.0f;
+    int rogueRowsSpawned = 0;
 
-    // After a wave advance, we queue row insertions and spawn them gradually
-    // AFTER the player picks a card.
+    // Após avançar de wave, filas são enfileiradas e inseridas gradualmente (depois de escolher carta).
     int roguePendingRowsToSpawn = 0;
     float rogueRowSpawnTimer = 0.0f;
-    float rogueRowSpawnInterval = 0.55f; // seconds between each inserted row (tune)
+    float rogueRowSpawnInterval = 0.55f;
 
-    // Menu state
+    // ------------------------- MENU STATE -------------------------
     MenuScreen currentMenuScreen = MenuScreen::MAIN;
     int selectedMenuOption = 0;
-    int hoveredMenuButton = -1; // -1 = none, 0-3 for main menu buttons
-    // PLAY_MODES: specific hover for the PLAY button on each mode card (-1 none, 0..3)
-    int hoveredPlayModeButton = -1;
-    int hoveredOverlayButton = -1; // -1 = none, 0 = left button, 1 = right button (pause/gameover/win)
-    bool hoveredCloseButton = false; // Instructions overlay BACK button (bottom-left)
-    bool hoveredTestBadge = false; // ONE BRICK test badge
+
+    int hoveredMenuButton = -1; // main menu buttons (0..3)
+    int hoveredPlayModeButton = -1; // PLAY_MODES: botão PLAY por cartão (0..3)
+    int hoveredOverlayButton = -1; // overlays (0 esquerda, 1 direita)
+    bool hoveredCloseButton = false; // botão BACK do overlay de instruções
+    bool hoveredTestBadge = false;
     bool showInstructions = false;
-    int instructionsTab = 0; // 0 = Controls, 1 = Powerups, 2 = Rogue Cards
-    // Powerups inspector (Instructions -> Powerups overlay)
+    int instructionsTab = 0; // 0 Controlos, 1 Power-ups, 2 Rogue Cards
+
+    // Inspector de power-ups (instruções).
     int powerupInspectIndex = 0;
     float powerupInspectYaw = 0.0f;
     float powerupInspectPitch = 0.0f;
     bool powerupInspectDragging = false;
     glm::vec2 powerupInspectLastMouse = glm::vec2(0.0f);
-    int hoveredPowerupNav = -1; // -1 none, 0 left, 1 right
+    int hoveredPowerupNav = -1; // 0 left, 1 right
 
-    // Rogue cards browser (Instructions -> Rogue Cards)
-    int hoveredRogueCardsItem = -1; // -1 none, else index into current slots list
+    // Browser de cartas Rogue (instruções).
+    int hoveredRogueCardsItem = -1;
     game::rogue::RogueCardId rogueCardsSelected = game::rogue::RogueCardId::PU_EXPAND;
-    bool rogueCardsInspectOpen = false; // modal card inspect overlay
-    float rogueCardsScrollPowerups = 0.0f;  // px
-    float rogueCardsScrollModifiers = 0.0f; // px
-    float rogueCardsScrollOp = 0.0f;        // px
-    bool testOneBrick = false;  // Test feature: spawn a single brick instead of the full wall
+    bool rogueCardsInspectOpen = false;
+    float rogueCardsScrollPowerups = 0.0f;
+    float rogueCardsScrollModifiers = 0.0f;
+    float rogueCardsScrollOp = 0.0f;
 
-    // --- Audio settings (volume sliders, linear 0..1) ---
+    bool testOneBrick = false;
+
+    // ------------------------- ÁUDIO (sliders) -------------------------
     float audioMasterVol = 1.0f;
     float audioSfxVol = 1.0f;
-    // Defaults tuned for a "feels right" mix: music present but below SFX, stingers a bit above music.
     float audioMusicVol = 0.32f;
     float audioStingerVol = 0.40f;
 
-    // Sound menu interactions
-    int hoveredSoundSlider = -1;     // -1 none, 0 master, 1 sfx, 2 music, 3 stinger
+    int hoveredSoundSlider = -1;  // 0 master, 1 sfx, 2 music, 3 stinger
     bool hoveredSoundBack = false;
-    int draggingSoundSlider = -1;    // -1 none, else slider index
+    int draggingSoundSlider = -1;
     bool draggingSound = false;
 
-    // Cached menu layout (computed using real font metrics to keep input + render aligned).
+    // Layout do menu (cacheado, calculado com métricas reais da fonte).
     ui::MenuLayout menuLayout;
-    // Endless danger warning
+
+    // Endless: aviso de danger zone.
     bool endlessDangerActive = false;
     float endlessDangerTimer = 0.0f;
     float endlessDangerMaxZ = 0.0f;
 
-    // --- Normal mode "last brick" finisher (short cinematic before WIN overlay) ---
+    // ------------------------- FINISHER DE VITÓRIA (modo Normal) -------------------------
     bool winFinisherActive = false;
-    float winFinisherTimer = 0.0f;      // burst time (camera break + shockwave)
-    float winFinisherRealTimer = 0.0f;  // real time since start (unscaled)
+    float winFinisherTimer = 0.0f;     // tempo cinematográfico do burst
+    float winFinisherRealTimer = 0.0f; // tempo real desde início
 
-    // Brick impact tracking (used to anchor VFX like the WIN finisher shockwave)
+    // Âncoras para efeitos (shockwave/flash) e para manter o último brick visível.
     bool lastBrickDestroyedValid = false;
     glm::vec3 lastBrickDestroyedPos = glm::vec3(0.0f);
 
     bool winFinisherAnchorValid = false;
     glm::vec3 winFinisherAnchorPos = glm::vec3(0.0f);
 
-    // During the brief win slow-down, keep the last brick visible (so it "breaks" on the burst).
     bool winFinisherHoldBrickValid = false;
     glm::vec3 winFinisherHoldBrickPos = glm::vec3(0.0f);
     glm::vec3 winFinisherHoldBrickSize = glm::vec3(1.0f);

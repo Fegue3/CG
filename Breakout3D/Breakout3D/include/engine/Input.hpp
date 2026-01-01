@@ -1,3 +1,4 @@
+// Input.hpp
 #pragma once
 #include <utility>
 
@@ -5,14 +6,23 @@ namespace engine {
 
 class Window;
 
-// Keys used by the game.
-// Note: number keys map to the TOP ROW digits (GLFW_KEY_0..9), not numpad.
+/**
+ * @file Input.hpp
+ * @brief Estado de input por frame (teclas/rato/scroll) sem expor GLFW ao jogo.
+ *
+ * Notas:
+ * - `keyDown` = mantida; `keyPressed` = transição (solta->carregada) no frame.
+ * - Posição do rato em pixels do framebuffer (útil para UI com DPI scaling).
+ * - `update(Window&)` deve ser chamado 1x por frame (após pollEvents).
+ */
 enum class Key { Escape, Left, Right, A, D, Space, K1, K2, K3, K4, K5, K6, K7, K8, K9, K0, Minus, L, R };
 enum class MouseButton { Left };
 
 class Input {
 public:
     static constexpr int KEY_COUNT = 19;
+
+    /// Actualiza estados (down/pressed), posição do rato e delta de scroll do frame.
     void update(Window& window);
 
     bool keyDown(Key k) const;
@@ -21,10 +31,10 @@ public:
     bool mouseDown(MouseButton b) const;
     bool mousePressed(MouseButton b) const;
 
-    // mouse em pixels do framebuffer (já convertido window->fb)
+    /// @return Posição do rato em px do framebuffer (x,y).
     std::pair<float,float> mousePosFbPx() const;
 
-    // Mouse wheel scroll delta (Y) since last update() call (positive = scroll up in GLFW).
+    /// @return Delta de scroll Y desde o último `update()` (positivo = scroll up no GLFW).
     float mouseScrollY() const { return m_scrollY; }
 
 private:

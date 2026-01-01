@@ -1,9 +1,19 @@
+// Window.hpp
 #pragma once
 #include <utility>
 #include <string>
 
 namespace engine {
 
+/**
+ * @file Window.hpp
+ * @brief Janela + contexto OpenGL + eventos, escondendo tipos GLFW do resto do projeto.
+ *
+ * Notas:
+ * - `getFramebufferSize()` vs `getWindowSize()` (DPI scaling).
+ * - Scroll é acumulado (callback) e consumido por frame via `consumeScrollY()`.
+ * - `nativeHandle()` devolve um ponteiro opaco (void*).
+ */
 class Window {
 public:
     Window();
@@ -20,11 +30,9 @@ public:
     std::pair<int,int> getFramebufferSize() const;
     std::pair<int,int> getWindowSize() const;
 
-    // Mouse wheel scroll (Y axis). Returns delta accumulated since last call and resets it to 0.
     float consumeScrollY();
     void addScrollY(float dy);
 
-    // não expõe GLFW types ao game
     void* nativeHandle() const { return m_window; }
 
 private:

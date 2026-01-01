@@ -1,3 +1,17 @@
+// Shader.cpp
+// -----------------------------------------------------------------------------
+// Shader.cpp
+//
+// Responsabilidade:
+//  - Carregar ficheiros GLSL (vertex/fragment) a partir do disco.
+//  - Compilar shaders, fazer link do programa e reportar erros para stderr.
+//  - Expor um wrapper simples para usar o programa e definir uniforms comuns.
+//
+// Notas:
+//  - A função load() faz destroy() antes de criar um novo programa para evitar leaks.
+//  - checkShader/checkProgram imprimem logs completos quando há falhas.
+// -----------------------------------------------------------------------------
+
 #include "engine/Shader.hpp"
 #include <GL/glew.h>
 

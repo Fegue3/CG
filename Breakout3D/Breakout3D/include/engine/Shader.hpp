@@ -1,3 +1,4 @@
+// Shader.hpp
 #pragma once
 
 #include <string>
@@ -5,6 +6,15 @@
 
 namespace engine {
 
+/**
+ * @file Shader.hpp
+ * @brief Wrapper simples para shader program OpenGL + uniforms comuns.
+ *
+ * Notas:
+ * - `load()` compila e linka vertex+fragment a partir de ficheiros.
+ * - `use()` activa o program.
+ * - `destroy()` liberta o program (contexto GL activo).
+ */
 class Shader {
 public:
     Shader();
@@ -13,7 +23,6 @@ public:
     bool load(const std::string& vertPath, const std::string& fragPath);
     void use() const;
 
-    // para o Renderer
     void destroy();
     unsigned int id() const;
 

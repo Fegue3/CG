@@ -1,5 +1,6 @@
 #include "game/Game.hpp"
 #include "engine/Input.hpp"
+
 #include "game/GameAssets.hpp"
 #include "game/systems/InitSystem.hpp"
 #include "game/systems/InputSystem.hpp"
@@ -19,13 +20,22 @@
 
 namespace game {
 
+/*
+    Game::update:
+    - Faz tick do áudio (fades/loops)
+    - Aplica settings de volume (sliders do menu)
+    - Faz snapshot do estado para triggers de SFX (diferenças entre frames)
+    - Pré-carrega GIFs dos powerups em background
+    - Processa menu/win finisher/input/overlays/timers/win conditions
+    - Por fim, corre a simulação do frame (updatePlayingFrame)
+*/
 void Game::update(const engine::Input& input) {
     float dt = m_time.delta();
 
-    // Tick audio (fades, loop gates). Audio may be disabled (init failure), that's OK.
+    // Tick áudio (fades, gating de loops). Pode estar desactivado.
     m_audio.update(dt);
 
-    // Live-apply audio settings from the menu sliders.
+    // Aplicar volumes em tempo real (sliders do menu)
     if (m_audio.isEnabled()) {
         m_audio.setMasterVolume(m_state.audioMasterVol);
         m_audio.setSfxVolume(m_state.audioSfxVol);
@@ -33,7 +43,7 @@ void Game::update(const engine::Input& input) {
         m_audio.setStingerVolume(m_state.audioStingerVol);
     }
 
-    // Snapshot for diff-based audio triggers (we keep this lightweight; most events are inferred from state changes)
+    // Snapshot para triggers baseados em diferenças
     GameMode modeBefore = m_state.mode;
     GameType typeBefore = m_state.gameType;
     int livesBefore = m_state.lives;
@@ -46,25 +56,21 @@ void Game::update(const engine::Input& input) {
     int attachedBefore = 0;
     for (const auto& b : m_state.balls) if (b.attached) attachedBefore++;
 
-    // Preload powerup GIF previews asynchronously while the game is running,
-    // so opening the Powerups inspector never stalls.
+    // Pré-carregar GIFs de powerups (assíncrono + upload incremental)
     m_assets.startPowerupVideoPreload();
     m_assets.pumpPowerupVideoPreload(6);
 
 #ifdef BREAKOUT3D_DEBUG
-    // Debug: spawn specific powerups (so you're not waiting on RNG).
-    // These use TOP-ROW keys (not numpad).
+    // Debug: spawn de powerups específicos (teclas da fila de cima).
     if (m_state.mode == GameMode::PLAYING) {
         auto spawnDebugDrop = [&](PowerUpType type) {
             PowerUp p;
             p.type = type;
-            // Spawn near the brick/top side so it "drops" across the arena like normal drops.
-            // Bricks start at cfg.arenaMinZ + 0.85f (see InitSystem.cpp).
+            // Bricks começam em cfg.arenaMinZ + 0.85f (InitSystem.cpp).
             p.pos = glm::vec3(m_state.paddlePos.x, 0.4f, m_cfg.arenaMinZ + 0.85f);
             m_state.powerups.push_back(p);
         };
 
-        // PowerUpType binds (top-row digits + '-' key)
         if (input.keyPressed(engine::Key::K8)) spawnDebugDrop(PowerUpType::EXPAND);
         if (input.keyPressed(engine::Key::K9)) spawnDebugDrop(PowerUpType::EXTRA_BALL);
         if (input.keyPressed(engine::Key::K0)) spawnDebugDrop(PowerUpType::EXTRA_LIFE);
@@ -76,12 +82,10 @@ void Game::update(const engine::Input& input) {
         if (input.keyPressed(engine::Key::K7)) spawnDebugDrop(PowerUpType::REVERSE);
     }
 
-    // Debug: fill Rogue cards (press R in ROGUE mode to max out cards)
+    // Debug: encher cartas Rogue (R em modo ROGUE)
     if (m_state.gameType == GameType::ROGUE && input.keyPressed(engine::Key::R)) {
-        // Fill with all available cards up to max 20
         m_state.rogueChosen.clear();
 
-        // Add all cards from the enum
         const game::rogue::RogueCardId allCards[] = {
             game::rogue::RogueCardId::PU_EXPAND,
             game::rogue::RogueCardId::PU_EXTRA_BALL,
@@ -112,15 +116,16 @@ void Game::update(const engine::Input& input) {
     }
 #endif
 
-    // =========== MENU LOGIC ===========
+    // MENU
     if (updateMenu(input)) return;
 
+    // Finisher (se activo, consome o frame)
     if (updateWinFinisher(dt)) return;
 
-    // Handle game input (pause, paddle movement, ball launch, etc.)
+    // Input do jogo (pause, movimento, launch, etc.)
     InputSystem::handleGameInput(m_state, input, m_cfg, m_window, dt);
 
-    // Pause toggle audio + music
+    // Transição PAUSED: SFX + música
     if (modeBefore != m_state.mode) {
         if (m_state.mode == GameMode::PAUSED) {
             m_audio.playSfx("ui/ui_pause_in");
@@ -130,21 +135,24 @@ void Game::update(const engine::Input& input) {
         }
     }
 
-    // Ball launch sound (attached -> free)
+    // Som de launch (attached -> livre)
     int attachedAfter = 0;
     for (const auto& b : m_state.balls) if (b.attached) attachedAfter++;
     if (attachedAfter < attachedBefore) {
         m_audio.playSfx("game/ball_launch", -1.5f);
     }
 
+    // Overlays/UI modais
     if (updateRogueCardsOverlay(input)) return;
     if (updatePausedOverlay(input)) return;
 
+    // Timers (cooldowns, auto-spawns, etc.)
     updateTimers(input, dt);
 
-    // Check for WIN condition (normal mode only)
-    if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::NORMAL && !InitSystem::anyBricksAlive(m_state)) {
-        // Trigger finisher cinematic (delays WIN overlay).
+    // WIN (modo NORMAL): quando não há bricks vivos
+    if (m_state.mode == GameMode::PLAYING &&
+        m_state.gameType == GameType::NORMAL &&
+        !InitSystem::anyBricksAlive(m_state)) {
         m_state.winFinisherActive = true;
         m_state.winFinisherTimer = 0.0f;
         m_state.winFinisherRealTimer = 0.0f;
@@ -152,19 +160,19 @@ void Game::update(const engine::Input& input) {
         m_state.winFinisherAnchorPos = m_state.lastBrickDestroyedPos;
         m_state.balls.clear();
         m_state.powerups.clear();
-        // IMPORTANT: don't run the rest of the frame (otherwise "no balls" would cost a life).
-        return;
+        return; // importante: evitar perder vida por "no balls"
     }
 
-    // Check for LEVEL COMPLETE condition (LEVELS mode only)
-    if (m_state.mode == GameMode::PLAYING && m_state.gameType == GameType::LEVELS && !InitSystem::anyBricksAlive(m_state)) {
-        // Level completed! Unlock next level if needed
+    // LEVEL COMPLETE (modo LEVELS)
+    if (m_state.mode == GameMode::PLAYING &&
+        m_state.gameType == GameType::LEVELS &&
+        !InitSystem::anyBricksAlive(m_state)) {
+
         if (m_state.currentLevel >= m_state.levelsBestLevel) {
             m_state.levelsBestLevel = m_state.currentLevel + 1;
             if (m_state.levelsBestLevel > 20) m_state.levelsBestLevel = 20;
         }
 
-        // Trigger finisher cinematic (delays WIN overlay)
         m_state.winFinisherActive = true;
         m_state.winFinisherTimer = 0.0f;
         m_state.winFinisherRealTimer = 0.0f;
@@ -172,16 +180,20 @@ void Game::update(const engine::Input& input) {
         m_state.winFinisherAnchorPos = m_state.lastBrickDestroyedPos;
         m_state.balls.clear();
         m_state.powerups.clear();
-        // IMPORTANT: don't run the rest of the frame (otherwise "no balls" would cost a life).
         return;
     }
 
+    // End overlay (Game Over / Win)
     if (updateEndOverlay(input)) return;
 
-    updatePlayingFrame(input, dt, modeBefore, typeBefore, livesBefore, waveBefore, endlessRowsBefore, dangerBefore, streakBefore, hadPowerupBefore);
-    return;
+    // Frame principal (física, colisões, rogue/endless logic, score, música, etc.)
+    updatePlayingFrame(
+        input, dt,
+        modeBefore, typeBefore,
+        livesBefore, waveBefore,
+        endlessRowsBefore, dangerBefore,
+        streakBefore, hadPowerupBefore
+    );
 }
 
 } // namespace game
-
-

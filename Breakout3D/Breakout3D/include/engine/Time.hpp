@@ -1,8 +1,17 @@
+// Time.hpp
 #pragma once
 #include <chrono>
 
 namespace engine {
 
+/**
+ * @file Time.hpp
+ * @brief Medição de tempo por frame: delta (dt) e tempo acumulado (now), em segundos.
+ *
+ * Notas:
+ * - Usa `steady_clock` (monotónico).
+ * - O primeiro `tick()` inicializa o baseline (dt tende a 0).
+ */
 class Time {
 public:
     void tick();

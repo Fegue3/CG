@@ -1,3 +1,4 @@
+// Input.cpp
 #include "engine/Input.hpp"
 #include "engine/Window.hpp"
 
@@ -6,6 +7,17 @@
 
 namespace engine {
 
+/**
+ * @file Input.cpp
+ * @brief Adaptação de input (teclado/rato) para uma enum própria do jogo.
+ *
+ * O Input faz “polling” do estado no fim/início de cada frame:
+ * - guarda estado actual (down) e o anterior (prev) para detectar edges (pressed)
+ * - converte coordenadas do cursor para pixels do framebuffer (para UI / hit-testing)
+ * - lê o scroll acumulado do Window (o callback mete lá os deltas)
+ */
+
+// Converte a enum Key do jogo para o código GLFW correspondente.
 static int keyToGlfw(Key k) {
     switch (k) {
         case Key::Escape: return GLFW_KEY_ESCAPE;
@@ -31,31 +43,40 @@ static int keyToGlfw(Key k) {
     return GLFW_KEY_UNKNOWN;
 }
 
+// Converte a enum MouseButton do jogo para o código GLFW correspondente.
 static int mouseToGlfw(MouseButton b) {
     switch (b) {
         case MouseButton::Left: return GLFW_MOUSE_BUTTON_LEFT;
     }
+    // Fallback defensivo.
     return GLFW_MOUSE_BUTTON_LEFT;
 }
 
 void Input::update(Window& window) {
-    std::copy(std::begin(m_keyDown), std::end(m_keyDown), std::begin(m_keyPrev));
+    // Guarda o estado anterior para poderes fazer "pressed" (edge).
+    std::copy(std::begin(m_keyDown),   std::end(m_keyDown),   std::begin(m_keyPrev));
     std::copy(std::begin(m_mouseDown), std::end(m_mouseDown), std::begin(m_mousePrev));
+
+    // O scroll é acumulado no Window (via callbacks); aqui consumimos e fazemos reset.
     m_scrollY = window.consumeScrollY();
 
     GLFWwindow* w = (GLFWwindow*)window.nativeHandle();
 
+    // Teclas: itera pela enum (assumindo que Key tem valores contíguos 0..KEY_COUNT-1).
     for (int i = 0; i < Input::KEY_COUNT; ++i) {
         m_keyDown[i] = (glfwGetKey(w, keyToGlfw((Key)i)) == GLFW_PRESS);
     }
 
+    // Botões do rato (actualmente só 1).
     for (int i = 0; i < 1; ++i) {
         m_mouseDown[i] = (glfwGetMouseButton(w, mouseToGlfw((MouseButton)i)) == GLFW_PRESS);
     }
 
+    // Posição do cursor em coordenadas de janela (pixels “window space”).
     double mx, my;
     glfwGetCursorPos(w, &mx, &my);
 
+    // Converte para pixels de framebuffer (importante em HiDPI / scaling).
     auto [fbW, fbH] = window.getFramebufferSize();
     auto [ww, wh]   = window.getWindowSize();
     ww = std::max(1, ww);

@@ -1,3 +1,4 @@
+// Game.hpp
 #pragma once
 #include "engine/Window.hpp"
 #include "engine/Time.hpp"
@@ -13,23 +14,44 @@ namespace game { struct GameAssets; }
 
 namespace game {
 
+/**
+ * @file Game.hpp
+ * @brief Classe principal do jogo: ciclo de vida (init/update/render) + gestão de estado/áudio.
+ *
+ * Responsabilidade geral:
+ * - Guardar `GameState` e `GameConfig`.
+ * - Actualizar o jogo com input por frame (menu, gameplay, overlays).
+ * - Renderizar mundo + UI através do renderer.
+ * - Orquestrar música/SFX com base em transições de estado (tracking de frame anterior).
+ */
 class Game {
 public:
     Game(engine::Window& window, engine::Time& time, engine::Renderer& renderer, GameAssets& assets);
 
+    /// Inicialização do jogo (estado, assets dependentes, áudio, etc.).
     void init();
+
+    /// Update por frame (lê input, actualiza estado, dispara eventos de áudio).
     void update(const engine::Input& input);
+
+    /// Render do frame actual (mundo 3D + UI).
     void render();
 
 private:
-    // Internal update helpers (to keep GameUpdate.cpp small and readable).
+    // Helpers internos (separados para manter o update legível e modular).
     void setMusic(const std::string& group, float fadeSeconds);
+
+    // Retornam true quando “consomem”/mudam o estado (útil para controlar fluxo).
     bool updateMenu(const engine::Input& input);
     bool updateWinFinisher(float dt);
     bool updateRogueCardsOverlay(const engine::Input& input);
     bool updatePausedOverlay(const engine::Input& input);
     bool updateEndOverlay(const engine::Input& input);
+
+    // Timers e cooldowns gerais (pausa, powerups, overlays, etc.).
     void updateTimers(const engine::Input& input, float dt);
+
+    // “Frame de jogo” quando está em PLAYING (separado para não entupir o update principal).
     void updatePlayingFrame(
         const engine::Input& input,
         float dt,
@@ -43,7 +65,7 @@ private:
         bool hadPowerupBefore
     );
 
-    // Shared helpers for Endless/Rogue bookkeeping.
+    // Helpers de persistência/bookkeeping (Endless).
     static std::string endlessBestScorePath();
     static void saveEndlessBestScore(int best);
     static void commitEndlessStreak(GameState& state);
@@ -59,12 +81,14 @@ private:
 
     AudioSystem m_audio;
 
-    // Previous-frame tracking for one-shot audio events
+    // Tracking do frame anterior para tocar one-shots só quando há transições (hover/click/mudança de ecrã).
     GameMode m_prevMode = GameMode::MENU;
     GameType m_prevGameType = GameType::NORMAL;
     MenuScreen m_prevMenuScreen = MenuScreen::MAIN;
+
     int m_prevHoveredMenuButton = -1;
     int m_prevHoveredPlayModeButton = -1;
+
     bool m_prevShowInstructions = false;
     int m_prevInstructionsTab = 0;
     int m_prevHoveredCloseButton = 0;
@@ -77,13 +101,15 @@ private:
     int m_prevWave = 1;
     int m_prevEndlessRowsSpawned = 0;
     bool m_prevEndlessDangerActive = false;
+
     bool m_prevStreakBanking = false;
     int m_prevStreakPoints = 0;
 
+    // Música do Endless por “tier” (low/mid/high).
     int m_endlessMusicTier = 0; // 0 low, 1 mid, 2 high
     std::string m_currentMusicGroup;
 
-    // Instructions overlay extra UX SFX
+    // UX extra do overlay de instruções (SFX de navegação/inspecção).
     int m_prevPowerupInspectIndex = 0;
     bool m_prevRogueCardsInspectOpen = false;
 };

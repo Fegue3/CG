@@ -6,6 +6,12 @@
 #include "game/Game.hpp"
 #include "game/GameAssets.hpp"
 
+/*
+    Entry point:
+    - Cria janela, renderer e carrega assets.
+    - Corre loop principal:
+        tick time -> poll events -> update input -> update game -> render game
+*/
 int main() {
     engine::Window window;
     // Slightly taller default window so the big menu title fits above the options cleanly.
@@ -17,16 +23,16 @@ int main() {
     engine::Renderer renderer;
     if (!renderer.init()) return -1;
 
-    // ✅ assets: carrega .obj/.mtl (e texturas via map_Kd)
+    // Load assets (.obj/.mtl + textures via map_Kd)
     game::GameAssets assets;
     if (!assets.loadAll()) return -1;
 
-    // ✅ input: GLFW fica escondido no engine
+    // Input (GLFW fica encapsulado na camada engine)
     engine::Input input;
 
-    // ✅ game recebe assets
+    // Game recebe window/time/renderer/assets
     game::Game game(window, time, renderer, assets);
-    // Don't call init() here - let the game start at MENU state
+    // Não chamar init() aqui - o jogo começa no estado MENU.
 
     while (!window.shouldClose()) {
         time.tick();

@@ -1,10 +1,24 @@
+// Texture.cpp
+// -----------------------------------------------------------------------------
+// Texture.cpp
+//
+// Responsabilidade:
+//  - Carregar imagens do disco via stb_image e criar Textures 2D em OpenGL.
+//  - Suportar flip vertical no load (útil para alinhar UVs com a convenção do motor).
+//  - Criar texturas a partir de buffers RGBA já existentes (ex.: GIF frames, UI).
+//
+// Notas:
+//  - loadFromFile() escolhe o formato (RED/RGB/RGBA) com base nos channels.
+//  - Por default cria mipmaps e usa GL_LINEAR_MIPMAP_LINEAR para minificação.
+//  - destroy() liberta a textura OpenGL para evitar leaks.
+// -----------------------------------------------------------------------------
+
 #include "engine/Texture.hpp"
 #include <stdexcept>
 #include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "external/stb_image.h"
-
 
 namespace engine {
 

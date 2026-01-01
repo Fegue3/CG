@@ -1,3 +1,4 @@
+// Mesh.cpp
 #include "engine/Mesh.hpp"
 #include "engine/Texture.hpp"
 
@@ -16,7 +17,8 @@ namespace fs = std::filesystem;
 
 namespace engine {
 
-static std::string g_baseDirPath = ""; // user muda via setBaseDirPath()
+// Directório base opcional, definido pelo utilizador (para resolver paths relativos).
+static std::string g_baseDirPath = "";
 
 static std::string trim(const std::string& s) {
     size_t a = s.find_first_not_of(" \t\r\n");
@@ -25,18 +27,20 @@ static std::string trim(const std::string& s) {
     return s.substr(a, b - a + 1);
 }
 
+// Resolve paths relativos ao directório do .obj/.mtl (ou a base dir se definida).
 static fs::path resolvePath(const fs::path& baseDir, const std::string& p) {
     fs::path in(p);
     if (in.is_absolute()) return in;
     return baseDir / in;
 }
 
+// Material lido do .mtl (cor difusa Kd + textura map_Kd).
 struct MTLMat {
     float kd[3] = {1,1,1};
-    std::string mapKd; // filename (relative)
+    std::string mapKd; // filename (relativo)
 };
 
-// ✅ helper: último token da linha (normalmente o filename real)
+// Último token da linha (útil porque map_Kd pode ter flags antes do filename).
 static std::string lastToken(const std::string& line) {
     std::istringstream ss(line);
     std::string tok, last;
@@ -44,6 +48,7 @@ static std::string lastToken(const std::string& line) {
     return last;
 }
 
+// Leitura simples de .mtl: suporta newmtl, Kd, map_Kd (ignorando flags no map_Kd).
 static std::unordered_map<std::string, MTLMat> loadMTL(const fs::path& mtlPath) {
     std::ifstream f(mtlPath);
     if (!f) throw std::runtime_error("Can't open MTL: " + mtlPath.string());
@@ -74,18 +79,19 @@ static std::unordered_map<std::string, MTLMat> loadMTL(const fs::path& mtlPath) 
             ss >> current.kd[0] >> current.kd[1] >> current.kd[2];
 
         } else if (key == "map_Kd") {
-            // ✅ lê o resto da linha e apanha o ÚLTIMO token (ignora flags tipo -s / -o)
+            // Lê o resto da linha e apanha só o último token (normalmente o caminho do ficheiro).
             std::string rest;
             std::getline(ss, rest);
             rest = trim(rest);
             current.mapKd = lastToken(rest);
         }
     }
+
     flush();
     return mats;
 }
 
-// Vertex final (pos 3, normal 3, uv 2)
+// Vertex final: posição + normal + UV (o teu shader base espera isto).
 struct Vertex {
     float px, py, pz;
     float nx, ny, nz;
@@ -93,13 +99,13 @@ struct Vertex {
 };
 
 struct IdxTriple {
-    int vi = -1; // position index
-    int ti = -1; // texcoord index
-    int ni = -1; // normal index
+    int vi = -1; // index posição
+    int ti = -1; // index uv
+    int ni = -1; // index normal
 };
 
+// Faz parse de "v/t/n", "v//n", "v/t" ou "v".
 static IdxTriple parseTriple(const std::string& tok) {
-    // formatos: v/t/n, v//n, v/t, v
     IdxTriple out;
 
     size_t p1 = tok.find('/');
@@ -123,7 +129,13 @@ static IdxTriple parseTriple(const std::string& tok) {
     return out;
 }
 
-// ---------------- Normalização (Opção B) ----------------
+// ---------------- Normalização ----------------
+//
+// Objectivo: meter o mesh num “cubo unitário” (aprox [-0.5..0.5] em cada eixo),
+// mantendo-o centrado. Isto facilita reusar modelos com escalas diferentes.
+//
+// Nota: como há escalas diferentes por eixo (sx/sy/sz), as normais ficam erradas
+// se não forem ajustadas. Aqui faz-se um ajuste simples e renormaliza.
 
 static inline float safeInv(float v) {
     return (std::fabs(v) > 1e-8f) ? (1.0f / v) : 1.0f;
@@ -158,10 +170,13 @@ static void normalizeToUnitCube(std::vector<Vertex>& verts) {
     const float sz = safeInv(ez);
 
     for (auto& v : verts) {
+        // Centragem + escala por eixo (fica normalizado mas “não uniforme” por eixo).
         v.px = (v.px - cx) * sx;
         v.py = (v.py - cy) * sy;
         v.pz = (v.pz - cz) * sz;
 
+        // Ajuste rápido de normais para compensar escalas diferentes (aproximação).
+        // Idealmente seria usar inverse-transpose do M, mas como já “cozinhamos” aqui:
         v.nx *= ex;
         v.ny *= ey;
         v.nz *= ez;
@@ -176,6 +191,7 @@ void Mesh::setBaseDirPath(const std::string& baseDirPath) {
 }
 
 void Mesh::destroy() {
+    // Destrói recursos OpenGL associados ao mesh.
     if (textureId) glDeleteTextures(1, &textureId);
     textureId = 0;
 
@@ -189,6 +205,7 @@ void Mesh::destroy() {
 Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
     Mesh mesh;
 
+    // Resolve path (permite paths relativos a um base dir definido pelo jogo).
     fs::path objPath = fs::path(objRelativeOrFullPath);
     if (!objPath.is_absolute() && !g_baseDirPath.empty()) {
         objPath = fs::path(g_baseDirPath) / objPath;
@@ -200,19 +217,23 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
 
     fs::path objDir = objPath.parent_path();
 
+    // Buffers “raw” como vêm do OBJ.
     std::vector<float> positions; // xyz
     std::vector<float> normals;   // xyz
     std::vector<float> texcoords; // uv
 
+    // Buffers finais para GPU.
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     vertices.reserve(4096);
     indices.reserve(4096);
 
+    // Materiais e estado do material activo.
     std::unordered_map<std::string, MTLMat> mats;
     std::string activeMtlName;
     bool materialApplied = false;
 
+    // Cache de “triples” (v/t/n) -> índice, para não duplicar vértices.
     std::unordered_map<std::string, unsigned int> cache;
     cache.reserve(8192);
 
@@ -235,6 +256,8 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
         v = texcoords[ti*2 + 1];
     };
 
+    // Aplica o material activo ao mesh (cor difusa e/ou textura) apenas uma vez.
+    // Este loader é “single material”: usa o primeiro material encontrado/activo.
     auto applyMaterialIfNeeded = [&]() {
         if (materialApplied) return;
         if (activeMtlName.empty()) return;
@@ -250,13 +273,14 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
             fs::path texPath = resolvePath(objDir, it->second.mapKd);
 
             try {
+                // flipY=true para alinhar texturas com o teu pipeline (UV vs imagem).
                 Texture2D t = Texture2D::loadFromFile(texPath.string(), true);
 
-                // ✅ evita leaks se trocar textura
+                // Se já havia textura, remove para evitar leaks (caso o material mude).
                 if (mesh.textureId) glDeleteTextures(1, &mesh.textureId);
 
                 mesh.textureId = t.id;
-                t.id = 0;
+                t.id = 0; // passa ownership para o Mesh
             } catch (const std::exception& e) {
                 std::cerr << "[Mesh] texture load failed for " << texPath.string()
                           << " : " << e.what() << "\n";
@@ -295,11 +319,12 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
         } else if (key == "usemtl") {
             ss >> activeMtlName;
 
-            // ✅ importante: quando muda de material, deixa aplicar novamente
+            // Quando muda o material, permitimos voltar a aplicar.
             materialApplied = false;
             applyMaterialIfNeeded();
 
         } else if (key == "f") {
+            // Faces podem vir trianguladas ou em polygons; triangulamos em “fan”.
             std::vector<IdxTriple> face;
             std::string tok;
             while (ss >> tok) face.push_back(parseTriple(tok));
@@ -315,6 +340,7 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
                 Vertex v{};
                 if (t.vi >= 0) getPos(t.vi, v.px, v.py, v.pz);
 
+                // Normais/UV podem não existir; mete defaults razoáveis.
                 if (t.ni >= 0 && (t.ni*3 + 2) < (int)normals.size()) getNor(t.ni, v.nx, v.ny, v.nz);
                 else { v.nx = 0; v.ny = 1; v.nz = 0; }
 
@@ -327,6 +353,7 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
                 return idx;
             };
 
+            // Triangulação em fan: (0,i,i+1)
             for (size_t i = 1; i + 1 < face.size(); i++) {
                 unsigned int i0 = emitVertexIndex(face[0]);
                 unsigned int i1 = emitVertexIndex(face[i]);
@@ -342,8 +369,10 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
         throw std::runtime_error("OBJ has no geometry: " + objPath.string());
     }
 
+    // Normaliza para uma escala consistente (evita “um modelo gigante” vs “um modelo minúsculo”).
     normalizeToUnitCube(vertices);
 
+    // Upload para OpenGL (VAO/VBO/EBO).
     glGenVertexArrays(1, &mesh.vao);
     glBindVertexArray(mesh.vao);
 
@@ -355,6 +384,7 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(indices.size() * sizeof(unsigned int)), indices.data(), GL_STATIC_DRAW);
 
+    // Layout de atributos: 0 pos, 1 normal, 2 uv.
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, px));
 
@@ -369,7 +399,4 @@ Mesh Mesh::loadOBJ(const std::string& objRelativeOrFullPath) {
     mesh.indexCount = (int)indices.size();
     return mesh;
 }
-
-// Create a simple plane mesh for background
-
 } // namespace engine

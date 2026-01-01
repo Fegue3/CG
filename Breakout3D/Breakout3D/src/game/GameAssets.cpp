@@ -1,37 +1,69 @@
 #include "game/GameAssets.hpp"
 #include "engine/Texture.hpp"
-#include <iostream>
+
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <algorithm>
+#include <iostream>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 namespace game {
 
-// stb_image implementation is provided by engine/Texture.cpp.
+// A implementação do stb_image está em engine/Texture.cpp.
+// Aqui apenas incluímos o header para usar stbi_load_gif_from_memory().
 #include "external/stb_image.h"
 
 static void joinIfRunning(std::thread& t) {
     if (t.joinable()) t.join();
 }
 
+/*
+    Decodificação assíncrona de GIFs (pré-visualização de powerups):
+
+    - Cada powerup pode ter um GIF animado em assets/video/.
+    - Para evitar stutters quando abres o overlay, a decodificação acontece num thread.
+    - Depois, os frames são carregados para Textures (GPU) de forma incremental (upload budget)
+      para não bloquear o frame.
+
+    Nota: os métodos são const porque o GameAssets pode ser usado como "asset container"
+    durante o render. Os arrays/flags de vídeo devem estar preparados para isso (p.ex. mutable/atomic no header).
+*/
 static void startDecodeThread(const game::GameAssets* self, int idx, const std::string& path) {
     self->powerupVideoDecoding[idx] = true;
+
+    // Se já havia um thread anterior, garante join antes de criar outro.
     joinIfRunning(self->powerupVideoThreads[idx]);
+
     self->powerupVideoThreads[idx] = std::thread([self, idx, path]() {
-        // Read file bytes
+        // Ler bytes do ficheiro para memória
         std::ifstream f(path, std::ios::binary);
         if (!f) { self->powerupVideoDecoding[idx] = false; return; }
+
         f.seekg(0, std::ios::end);
         std::streamoff len = f.tellg();
         f.seekg(0, std::ios::beg);
         if (len <= 0) { self->powerupVideoDecoding[idx] = false; return; }
+
         std::vector<unsigned char> bytes((size_t)len);
         f.read((char*)bytes.data(), len);
         if (!f) { self->powerupVideoDecoding[idx] = false; return; }
 
+        // Decodificar GIF (RGBA)
         int* delays = nullptr;
         int w = 0, h = 0, framesN = 0, comp = 0;
-        stbi_uc* data = stbi_load_gif_from_memory(bytes.data(), (int)bytes.size(), &delays, &w, &h, &framesN, &comp, 4);
+        stbi_uc* data = stbi_load_gif_from_memory(
+            bytes.data(),
+            (int)bytes.size(),
+            &delays,
+            &w,
+            &h,
+            &framesN,
+            &comp,
+            4
+        );
+
         if (!data || w <= 0 || h <= 0 || framesN <= 0) {
             if (data) stbi_image_free(data);
             if (delays) stbi_image_free(delays);
@@ -39,7 +71,9 @@ static void startDecodeThread(const game::GameAssets* self, int idx, const std::
             return;
         }
 
-        // Keep it light: cap frames and skip frames.
+        // Mantém isto leve:
+        // - salta frames (frameStep)
+        // - impõe cap de frames (maxFrames)
         const int frameStep = 2;
         const int maxFrames = 120;
 
@@ -50,6 +84,7 @@ static void startDecodeThread(const game::GameAssets* self, int idx, const std::
 
         const size_t frameBytes = (size_t)w * (size_t)h * 4;
         int kept = 0;
+
         for (int i = 0; i < framesN && kept < maxFrames; i += frameStep) {
             const unsigned char* src = data + (size_t)i * frameBytes;
             std::vector<unsigned char> buf(src, src + frameBytes);
@@ -61,6 +96,7 @@ static void startDecodeThread(const game::GameAssets* self, int idx, const std::
         stbi_image_free(data);
         if (delays) stbi_image_free(delays);
 
+        // Publica os frames decodificados para o "buffer" partilhado
         {
             std::lock_guard<std::mutex> lk(self->powerupVideoMutex[idx]);
             auto& out = self->powerupVideoDecodedData[idx];
@@ -68,40 +104,47 @@ static void startDecodeThread(const game::GameAssets* self, int idx, const std::
             out.h = h;
             out.framesRGBA = std::move(frames);
             out.delaysMs = std::move(dly);
+
             self->powerupVideoUploadCursor[idx] = 0;
             self->powerupVideoDecoded[idx] = true;
         }
+
         self->powerupVideoDecoding[idx] = false;
     });
 }
 
 void GameAssets::startPowerupVideoPreload() const {
+    // Apenas inicia uma vez (evita re-lançar threads constantemente).
     bool expected = false;
     if (!powerupVideoPreloadStarted.compare_exchange_strong(expected, true)) return;
 
     for (int i = 0; i < 8; ++i) {
         if (powerupVideoLoaded[i]) continue;
         if (powerupVideoTried[i]) continue;
+
         powerupVideoTried[i] = true;
         const std::string path = powerupVideoPaths[i];
         if (path.empty() || !std::filesystem::exists(path)) continue;
+
         startDecodeThread(this, i, path);
     }
 }
 
 void GameAssets::pumpPowerupVideoPreload(int uploadBudgetFrames) const {
+    // Faz upload incremental de frames para GPU, distribuído por vários GIFs.
     uploadBudgetFrames = std::max(0, uploadBudgetFrames);
     if (uploadBudgetFrames == 0) return;
 
-    // Round-robin upload across videos so we don't stall.
-    static int rr = 0;
+    static int rr = 0; // round-robin
     for (int step = 0; step < 8 && uploadBudgetFrames > 0; ++step) {
         int idx = (rr + step) % 8;
+
         if (powerupVideoLoaded[idx]) continue;
         if (!powerupVideoDecoded[idx]) continue;
 
         std::lock_guard<std::mutex> lk(powerupVideoMutex[idx]);
         auto& d = powerupVideoDecodedData[idx];
+
         if (d.framesRGBA.empty() || d.w <= 0 || d.h <= 0) {
             powerupVideoDecoded[idx] = false;
             continue;
@@ -109,6 +152,7 @@ void GameAssets::pumpPowerupVideoPreload(int uploadBudgetFrames) const {
 
         auto& anim = powerupVideos[idx];
         int& cursor = powerupVideoUploadCursor[idx];
+
         if (cursor == 0) {
             anim.frames.clear();
             anim.delaysMs.clear();
@@ -116,29 +160,36 @@ void GameAssets::pumpPowerupVideoPreload(int uploadBudgetFrames) const {
             anim.delaysMs.reserve(d.delaysMs.size());
         }
 
-        // Upload one frame per iteration for smoothness.
-        anim.frames.push_back(engine::Texture2D::loadFromRGBA(d.framesRGBA[cursor].data(), d.w, d.h, false));
+        // Upload de 1 frame por iteração (suave, sem stalls).
+        anim.frames.push_back(engine::Texture2D::loadFromRGBA(
+            d.framesRGBA[cursor].data(), d.w, d.h, false
+        ));
         anim.delaysMs.push_back((cursor < (int)d.delaysMs.size()) ? d.delaysMs[cursor] : 100);
+
         cursor++;
         uploadBudgetFrames--;
 
+        // Terminou este GIF
         if (cursor >= (int)d.framesRGBA.size()) {
             d.framesRGBA.clear();
             d.delaysMs.clear();
             d.w = d.h = 0;
+
             powerupVideoDecoded[idx] = false;
             powerupVideoLoaded[idx] = !anim.frames.empty();
         }
     }
+
     rr = (rr + 1) % 8;
 }
 
 const engine::AnimatedTexture2D& GameAssets::powerupVideo(int idx) const {
     static engine::AnimatedTexture2D empty;
+
     if (idx < 0 || idx >= 8) return empty;
     if (powerupVideoLoaded[idx]) return powerupVideos[idx];
 
-    // If we have decoded frames waiting, upload a few per frame (so UI never stalls).
+    // Se já há frames decodificados, faz upload parcial por chamada (para nunca bloquear).
     if (powerupVideoDecoded[idx]) {
         std::lock_guard<std::mutex> lk(powerupVideoMutex[idx]);
         auto& d = powerupVideoDecodedData[idx];
@@ -146,6 +197,7 @@ const engine::AnimatedTexture2D& GameAssets::powerupVideo(int idx) const {
 
         const int uploadPerCall = 3;
         int& cursor = powerupVideoUploadCursor[idx];
+
         if (cursor == 0) {
             anim.frames.clear();
             anim.delaysMs.clear();
@@ -161,17 +213,19 @@ const engine::AnimatedTexture2D& GameAssets::powerupVideo(int idx) const {
         cursor = end;
 
         if (cursor >= (int)d.framesRGBA.size()) {
-            // Done uploading; free CPU buffers.
+            // Libertar buffers CPU
             d.framesRGBA.clear();
             d.delaysMs.clear();
             d.w = d.h = 0;
+
             powerupVideoDecoded[idx] = false;
             powerupVideoLoaded[idx] = !anim.frames.empty();
         }
+
         return powerupVideos[idx];
     }
 
-    // Kick off decoding in the background (only once).
+    // Ainda não tentou: inicia decoding em background
     if (!powerupVideoTried[idx]) {
         powerupVideoTried[idx] = true;
 
@@ -186,45 +240,48 @@ const engine::AnimatedTexture2D& GameAssets::powerupVideo(int idx) const {
 
 bool GameAssets::loadAll() {
     try {
-        // baseDirPath: aqui é o único sítio onde defines isto
+        // Aqui é o ponto único onde defines a pasta base de modelos.
         engine::Mesh::setBaseDirPath("assets/models");
 
+        // Meshes
         ball   = engine::Mesh::loadOBJ("Ball.obj");
         paddle = engine::Mesh::loadOBJ("Paddle.obj");
         heart  = engine::Mesh::loadOBJ("heart.obj");
 
         brick01 = engine::Mesh::loadOBJ("Brick_01.obj");
 
-        brick02       = engine::Mesh::loadOBJ("Brick_02.obj");
-        brick02_1hit  = engine::Mesh::loadOBJ("Brick_02_1hit.obj");
+        brick02      = engine::Mesh::loadOBJ("Brick_02.obj");
+        brick02_1hit = engine::Mesh::loadOBJ("Brick_02_1hit.obj");
 
-        brick03       = engine::Mesh::loadOBJ("Brick_03.obj");
-        brick03_1hit  = engine::Mesh::loadOBJ("Brick_03_1hit.obj");
-        brick03_2hit  = engine::Mesh::loadOBJ("Brick_03_2hit.obj");
+        brick03      = engine::Mesh::loadOBJ("Brick_03.obj");
+        brick03_1hit = engine::Mesh::loadOBJ("Brick_03_1hit.obj");
+        brick03_2hit = engine::Mesh::loadOBJ("Brick_03_2hit.obj");
 
-        brick04       = engine::Mesh::loadOBJ("Brick_04.obj");
-        brick04_1hit  = engine::Mesh::loadOBJ("Brick_04_1hit.obj");
-        brick04_2hit  = engine::Mesh::loadOBJ("Brick_04_2hit.obj");
-        brick04_3hit  = engine::Mesh::loadOBJ("Brick_04_3hit.obj");
+        brick04      = engine::Mesh::loadOBJ("Brick_04.obj");
+        brick04_1hit = engine::Mesh::loadOBJ("Brick_04_1hit.obj");
+        brick04_2hit = engine::Mesh::loadOBJ("Brick_04_2hit.obj");
+        brick04_3hit = engine::Mesh::loadOBJ("Brick_04_3hit.obj");
 
-        expand        = engine::Mesh::loadOBJ("Expand.obj");
-        extraBall     = engine::Mesh::loadOBJ("Extra_Ball.obj");
-        slow          = engine::Mesh::loadOBJ("Slow.obj");
-        extraLife     = engine::Mesh::loadOBJ("extralife.obj");
-        fireball      = engine::Mesh::loadOBJ("Fireball.obj");
-        shield        = engine::Mesh::loadOBJ("Shield.obj");
-        skull         = engine::Mesh::loadOBJ("Skull.obj");
-        minus         = engine::Mesh::loadOBJ("Minus.obj");
+        expand    = engine::Mesh::loadOBJ("Expand.obj");
+        extraBall = engine::Mesh::loadOBJ("Extra_Ball.obj");
+        slow      = engine::Mesh::loadOBJ("Slow.obj");
+        extraLife = engine::Mesh::loadOBJ("extralife.obj");
+        fireball  = engine::Mesh::loadOBJ("Fireball.obj");
+        shield    = engine::Mesh::loadOBJ("Shield.obj");
+        skull     = engine::Mesh::loadOBJ("Skull.obj");
+        minus     = engine::Mesh::loadOBJ("Minus.obj");
 
-        // Se quiseres walls com o mesmo mesh do brick:
+        // Walls com o mesmo mesh do brick.
         wall = brick01;
 
+        // Backgrounds
         backgroundTexs[0] = engine::Texture2D::loadFromFile("assets/textures/Background.png", true);
         backgroundTexs[1] = engine::Texture2D::loadFromFile("assets/textures/Background2.png", true);
         backgroundTexs[2] = engine::Texture2D::loadFromFile("assets/textures/Background3.png", true);
         backgroundTexs[3] = engine::Texture2D::loadFromFile("assets/textures/Background4.png", true);
 
-        // Optional powerup "video" previews (animated GIFs): set paths only (lazy-loaded on first display).
+        // GIFs opcionais (pré-visualização de powerups).
+        // Apenas definimos paths aqui: o decode/upload é lazy e incremental.
         powerupVideoPaths[0] = "assets/video/Expand_powerup.gif";
         powerupVideoPaths[1] = "assets/video/Extra-Ball_powerup.gif";
         powerupVideoPaths[2] = "assets/video/Extra-life_powerup.gif";
@@ -233,6 +290,8 @@ bool GameAssets::loadAll() {
         powerupVideoPaths[5] = "assets/video/Shield_powerup.gif";
         powerupVideoPaths[6] = "assets/video/Reserve_powerup.gif"; // REVERSE
         powerupVideoPaths[7] = "assets/video/Tiny_powerup.gif";
+
+        // Reset do estado de preload/decoding
         for (int i = 0; i < 8; ++i) {
             powerupVideoLoaded[i] = false;
             powerupVideoDecoding[i] = false;
@@ -250,9 +309,12 @@ bool GameAssets::loadAll() {
 }
 
 void GameAssets::destroy() {
-    // cuidado: wall = brick01 é cópia de handles OpenGL.
-    // Se fizeres isso, NÃO destruas wall separado. Melhor: remove wall e usa brick01.
-    // Vou destruir só os "donos reais":
+    /*
+        Libertação de recursos:
+        - Atenção: wall = brick01 copia handles OpenGL (não destruir duas vezes).
+        - Destrói apenas os "donos reais".
+    */
+
     ball.destroy();
     paddle.destroy();
     heart.destroy();
@@ -279,22 +341,28 @@ void GameAssets::destroy() {
     shield.destroy();
     skull.destroy();
     minus.destroy();
+
     for (int i = 0; i < 4; i++) backgroundTexs[i].destroy();
 
+    // Vídeos (GIF): destruir animações e garantir join de threads
     for (int i = 0; i < 8; ++i) {
         powerupVideos[i].destroy();
+
         powerupVideoLoaded[i] = false;
         powerupVideoDecoding[i] = false;
         powerupVideoDecoded[i] = false;
         powerupVideoTried[i] = false;
         powerupVideoPaths[i].clear();
         powerupVideoUploadCursor[i] = 0;
+
         {
             std::lock_guard<std::mutex> lk(powerupVideoMutex[i]);
             powerupVideoDecodedData[i] = DecodedGif{};
         }
+
         joinIfRunning(powerupVideoThreads[i]);
     }
+
     powerupVideoPreloadStarted = false;
 }
 
