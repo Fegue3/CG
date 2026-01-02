@@ -455,8 +455,10 @@
          voice->valid = false;
      }
  
-     // Carrega do ficheiro e toca
-     ma_result r = ma_sound_init_from_file(&m_impl->engine, filePath.c_str(), 0, nullptr, nullptr, &voice->s);
+    // Carrega do ficheiro e toca (decode + async para SFX one-shot)
+    ma_result r = ma_sound_init_from_file(&m_impl->engine, filePath.c_str(), 
+                                          MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_ASYNC, 
+                                          nullptr, nullptr, &voice->s);
      if (r != MA_SUCCESS) return;
  
      voice->valid = true;
@@ -512,8 +514,10 @@
          newValid = false;
      }
  
-     // Carrega o novo loop
-     ma_result r = ma_sound_init_from_file(&m_impl->engine, filePath.c_str(), 0, nullptr, nullptr, newS);
+    // Carrega o novo loop (streaming para música reduz memória e latência)
+    ma_result r = ma_sound_init_from_file(&m_impl->engine, filePath.c_str(), 
+                                          MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_ASYNC, 
+                                          nullptr, nullptr, newS);
      if (r != MA_SUCCESS) return;
  
      newValid = true;
@@ -612,7 +616,9 @@
      // Se ainda não existe e queremos ligar, inicializa e começa a tocar em volume 0.
      if (!L.valid) {
          if (!enabled) return; // não criar loop só para desligar
-         ma_result r = ma_sound_init_from_file(&m_impl->engine, filePath.c_str(), 0, nullptr, nullptr, &L.sound);
+         ma_result r = ma_sound_init_from_file(&m_impl->engine, filePath.c_str(), 
+                                              MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_ASYNC, 
+                                              nullptr, nullptr, &L.sound);
          if (r != MA_SUCCESS) return;
          L.valid = true;
          ma_sound_set_looping(&L.sound, MA_TRUE);
