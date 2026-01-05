@@ -19,16 +19,16 @@
  * --------------------------
  * Raiz: assets/audio
  *
- *  - SFX: assets/audio/sfx/**\/*.wav
+ *  - SFX: assets/audio/sfx/ (recursivo; ficheiros .wav)
  *      ID = caminho relativo dentro de sfx/, sem extensão, e com sufixo _NN opcional removido.
  *      Ex: assets/audio/sfx/game/hit_wall_01.wav  -> id "game/hit_wall"
  *          assets/audio/sfx/ui/ui_confirm.wav     -> id "ui/ui_confirm"
  *
- *  - Music loops: assets/audio/music/*.wav
+ *  - Music loops: assets/audio/music/ (ficheiros .wav)
  *      ID = nome do ficheiro sem extensão (strip _NN)
  *      Ex: assets/audio/music/music_menu_loop.wav -> id "music_menu_loop"
  *
- *  - Stingers musicais: assets/audio/stingers_music/*.wav
+ *  - Stingers musicais: assets/audio/stingers_music/ (ficheiros .wav)
  *      ID = nome do ficheiro sem extensão (strip _NN)
  *      Ex: assets/audio/stingers_music/stinger_game_over.wav -> id "stinger_game_over"
  *
